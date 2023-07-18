@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "funcanalysis"
+version = "0.1.0"
+description = "Package for clustering of georeferenced functional data in additive manufacturing. This is my MSc Thesis Project."
+authors = ["FedericoCantarelli <fede.cantarelli98@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+matplotlib = "^3.7.2"
+pandas = "^2.0.3"
+scikit-learn = "^1.3.0"
+pillow = "^10.0.0"
+regex = "^2023.6.3"
+statistics = "^1.0.3.5"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
