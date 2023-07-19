@@ -22,28 +22,39 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import re
 import numpy as np
+import utils.py
 
 
 class Cell:
-    def __init__(self, cell_id: str, position: tuple, real: np.ndarray = None, nominal: bool = True) -> None:
+    def __init__(self, cell_id: str, position: tuple, real: np.ndarray = None, is_in_control: bool = True, is_nominal: bool = True) -> None:
         self.cell_id = cell_id
         self.real = real
-        self.nominal = nominal
+        self.nominal = is_nominal
+        self.in_control = is_in_control
 
         # Tuple, position of the cell in the space in format (x,y,z)
         self.position = position
 
         # Dictionary with all the transformations made on the cell
-        self.transformations = dict(add_in_control_noise=None, add_missing_material=None, add_extra_material=None,
-                                    add_systematic_error=None)
+        self.transformations = dict(add_in_control_noise=None, add_missing_material=None, add_extra_material=None, add_systematic_error=None)
 
         # Deviation maps
         self.tm_e = None
         self.tm_l = None
         self.d1 = None
         self.d2 = None
+    
 
-
+    @property
+    def cell_name(self):
+        if self.nominal:
+            return self.cell_id + "_nominal"
+        
+        if self.in_control:
+            return self.cell_id + "_in_control"
+        
+        return self.cell_id + "_out_of_control"
+         
 
     @classmethod
     def build_from_pngs(cls, path_real: str):
@@ -112,3 +123,83 @@ class Cell:
         # Free memory
         del frames_gif
         return None
+    
+
+    def get_deviation_maps(self, nom, which: str = "both") -> None:
+
+        assert which in ['haudorff', 'truth',
+                         'both'], "Error: invalid which parameter."
+
+        if which == 'hausdorff':
+            d = self.find_hausdorff_maps(nom)
+            self.d1 = d[0]
+            self.d2 = d[1]
+
+        elif which == 'truth':
+            tm = self.find_tm_maps(nom)
+            self.tm_e = tm[0]
+            self.tm_l = tm[1]
+
+        elif which == 'both':
+            d = self.find_hausdorff_maps(nom)
+            tm = self.find_tm_maps(nom)
+
+            self.d1 = d[0]
+            self.d2 = d[1]
+            self.tm_e = tm[0]
+            self.tm_l = tm[1]
+
+        return None
+
+    def find_tm_maps(self, nom) -> tuple:
+        """
+        Function to find the truth matrix deviation map
+
+        Args:
+            nom (Cell): Nominal cell object
+
+        Returns:
+            tuple: Returns a tuple with tm_e and tm_l
+        """
+
+        assert nom.nominal and type(
+            nom) == Cell, "Error, argument must be a nominal cell object."
+
+        # Init arrays
+        tm_e = np.zeros(shape=nom.frames.shape)
+        tm_l = np.zeros(shape=nom.frames.shape)
+
+        # Compute truth matrix
+        for i in range(nom.frames.shape[0]):
+            mask_1 = nom.frames[i] == 0
+            mask_2 = self.frames[i] == 1
+            tm_l[i] = mask_1 & mask_2
+
+            mask_1 = nom.frames[i] == 1
+            mask_2 = self.frames[i] == 0
+            tm_e[i] = mask_1 & mask_2
+
+        return (tm_e, tm_l)
+
+    def find_hausdorff_maps(self, nom) -> tuple:
+
+        d1 = np.zeros_like(self.frames)
+        d2 = np.zeros_like(self.frames)
+
+        for r in range(self.frames.shape[0]):
+            real_0_indexes = np.where(self.frames[r] == 0)
+            nominal_0_indexes = np.where(nom.frames[r] == 0)
+
+            d = utils.euclidean_distance_matrix(
+                real_0_indexes, nominal_0_indexes)
+            min_distances = np.min(d, axis=1)
+            for i, j, z in zip(real_0_indexes[0], real_0_indexes[1], min_distances):
+                d1[r, i, j] = z
+
+            d = utils.euclidean_distance_matrix(
+                nominal_0_indexes, real_0_indexes)
+            min_distances = np.min(d, axis=1)
+            for i, j, z in zip(nominal_0_indexes[0], nominal_0_indexes[1], min_distances):
+                d2[r, i, j] = z
+
+        return (d1, d2)
