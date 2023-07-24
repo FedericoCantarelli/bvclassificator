@@ -114,56 +114,161 @@ class Structure:
         Returns:
             tuple: Return a dataframe with clustered observations and space entropy in the form (x | y | cluster | space entropy). 
         """
+        #  Check if there is at least 3 observations per centroid on average
         assert n < len(self.profiles)//3
+
+        # Dataframe for bootstrapping result
         df = pd.DataFrame()
 
         for b in range(bootstrap):
+            print("======")
+            print("Starting bootstrap {}".format(b))
             selected_centroid_voronoi = []
+            print("Starting centroid selection")
             for i in range(n):
                 num = np.random.randint(len(self.profiles))
                 if num not in selected_centroid_voronoi:
                     selected_centroid_voronoi.append(num)
-                
+
                 else:
                     while num in selected_centroid_voronoi:
                         num = np.random.randint(len(self.profiles))
                     selected_centroid_voronoi.append(num)
-        
 
-            grouped_dict = dict()
+            print("Selected centroid")
+            print(selected_centroid_voronoi)
+
+            dictionary = dict()
 
             for i in range(len(self.profiles)):
-                index_min = 
-                grouped_dict[c] = 
+                index_min = np.argmin(
+                    self.distance_matrix[i, selected_centroid_voronoi])
+                dictionary[i] = selected_centroid_voronoi[index_min]
 
+            print("Grouping dictionary...")
+            grouped_dict = dict()
+            for key, value in dictionary.items():
+                if value not in grouped_dict:
+                    grouped_dict[value] = [key]
+                else:
+                    grouped_dict[value].append(key)
 
-        df["clustering_n_" + str(b)] = # clustering result
+            print(grouped_dict)
 
+            avg_dictionary = dict()
 
-        print("Begin cluster matching...")
+            print("Computing grouped dictionary...")
+            for k in grouped_dict.keys():
+                temp_list = []
+                for index in grouped_dict[k]:
+                    temp_list.append(self.profiles[index].profile)
+
+                temp_array = np.array(temp_list)
+                avg_dictionary[k] = np.mean(temp_array, axis=0)
+
+            print(avg_dictionary)
 
 
 def main():
     a = Profile(profile_id="a",
                 x=0,
                 y=0,
-                profile=np.arange(0, 60, 1800),
+                profile=np.arange(0, 60),
                 is_in_control=True)
 
     b = Profile(profile_id="b",
-                x=4,
+                x=1,
                 y=0,
-                profile=np.arange(0, 60, 1800),
+                profile=np.arange(0, 60),
                 is_in_control=False)
 
     c = Profile(profile_id="c",
-                x=5,
-                y=2,
-                profile=np.arange(0, 60, 1800),
+                x=2,
+                y=0,
+                profile=np.arange(0, 60),
                 is_in_control=True)
 
-    strc = Structure([a, b, c])
-    print(strc.index_from_coordinates((5, 2)))
+    d = Profile(profile_id="d",
+                x=3,
+                y=0,
+                profile=np.arange(0, 60),
+                is_in_control=True)
+
+    e = Profile(profile_id="e",
+                x=0,
+                y=1,
+                profile=np.arange(0, 60),
+                is_in_control=True)
+
+    f = Profile(profile_id="f",
+                x=1,
+                y=1,
+                profile=np.arange(0, 60),
+                is_in_control=False)
+
+    g = Profile(profile_id="g",
+                x=2,
+                y=1,
+                profile=np.arange(0, 60),
+                is_in_control=True)
+
+    h = Profile(profile_id="h",
+                x=3,
+                y=1,
+                profile=np.arange(0, 60),
+                is_in_control=True)
+
+    i = Profile(profile_id="i",
+                x=0,
+                y=2,
+                profile=np.arange(0, 60),
+                is_in_control=True)
+
+    l = Profile(profile_id="l",
+                x=1,
+                y=2,
+                profile=np.arange(0, 60),
+                is_in_control=False)
+
+    m = Profile(profile_id="m",
+                x=2,
+                y=2,
+                profile=np.arange(0, 60),
+                is_in_control=True)
+
+    n = Profile(profile_id="n",
+                x=3,
+                y=2,
+                profile=np.arange(0, 60),
+                is_in_control=True)
+
+    o = Profile(profile_id="o",
+                x=0,
+                y=3,
+                profile=np.arange(0, 60),
+                is_in_control=True)
+
+    p = Profile(profile_id="p",
+                x=1,
+                y=3,
+                profile=np.arange(0, 60),
+                is_in_control=False)
+
+    q = Profile(profile_id="q",
+                x=2,
+                y=3,
+                profile=np.arange(0, 60),
+                is_in_control=True)
+
+    r = Profile(profile_id="r",
+                x=3,
+                y=3,
+                profile=np.arange(10, 70),
+                is_in_control=True)
+
+    strc = Structure([a, b, c, d, e, f, g, h, i, l, m, n, o, p, q, r])
+
+    strc.cluster_now(3, 2, 0, 0.9)
 
 
 if __name__ == "__main__":
