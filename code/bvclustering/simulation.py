@@ -5,13 +5,16 @@ from matplotlib.lines import Line2D
 from tabulate import tabulate
 
 
-
-
 class Simulation(Profile):
     def __init__(self, profile_id: str, x: float, y: float, beta0: tuple, beta1: tuple, beta2_coeff: float, beta2_slope: float, error: tuple, is_in_control: bool = True, deviation_entity: float = None,
                  time: float = 60, fps: int = 30) -> None:
 
-        super().__init__(profile_id, x, y, is_in_control)
+        super().__init__(profile_id=profile_id, 
+                         x=x, 
+                         y=y, 
+                         is_in_control=is_in_control, 
+                         time=time, 
+                         fps=fps)
 
         self.beta0 = beta0
         self.beta1 = beta1
@@ -20,10 +23,6 @@ class Simulation(Profile):
         self.error = error
         self.deviation_entity = deviation_entity
 
-        self.time = time
-        self.fps = fps
-
-        self.time_evolution = np.arange(0, time, 1/fps)
         self.profile = np.zeros_like(self.time_evolution)
 
         self.b0_eff = 0.0
