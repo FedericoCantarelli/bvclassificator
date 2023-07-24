@@ -5,6 +5,8 @@ from matplotlib.lines import Line2D
 from tabulate import tabulate
 
 
+
+
 class Simulation(Profile):
     def __init__(self, profile_id: str, x: float, y: float, beta0: tuple, beta1: tuple, beta2_coeff: float, beta2_slope: float, error: tuple, is_in_control: bool = True, deviation_entity: float = None,
                  time: float = 60, fps: int = 30) -> None:
