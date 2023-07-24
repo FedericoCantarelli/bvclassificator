@@ -111,7 +111,7 @@ class Cell:
             os.makedirs(output_location)
 
         # Convert each numpy.ndarray into a PIL object
-        for f in self.real:
+        for f in self.layers:
             img = Image.fromarray((f * 255).astype(np.uint8), mode='L')
             frames_gif.append(img)
 
@@ -129,7 +129,7 @@ class Cell:
 
     def get_deviation_maps(self, nom, which: str = "both") -> None:
 
-        assert which in ['haudorff', 'truth',
+        assert which in ['hausdorff', 'truth',
                          'both'], "Error: invalid which parameter."
 
         if which == 'hausdorff':
