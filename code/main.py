@@ -12,6 +12,6 @@ prova.run()
 
 prova.dump_to_json("./")
 
-print(prova.__dict__.keys())
+print(prova.position)
 
 prova.plot()
