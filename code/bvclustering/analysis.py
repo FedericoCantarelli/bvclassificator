@@ -8,6 +8,8 @@ from skfda.preprocessing.dim_reduction import FPCA
 from sklearn.metrics.cluster import contingency_matrix
 from sklearn.cluster import KMeans
 from skfda.representation.grid import FDataGrid
+import warnings
+warnings.filterwarnings('ignore')
 
 
 def euclidean_distance_matrix(x: np.ndarray, y: np.ndarray) -> np.ndarray:
@@ -128,10 +130,8 @@ class Structure:
         df = pd.DataFrame()
 
         for b in range(bootstrap):
-            print("======")
             print("Starting bootstrap {}".format(b))
             selected_centroid_voronoi = []
-            print("Starting centroid selection")
             for i in range(n):
                 num = np.random.randint(len(self.profiles))
                 if num not in selected_centroid_voronoi:
@@ -142,9 +142,6 @@ class Structure:
                         num = np.random.randint(len(self.profiles))
                     selected_centroid_voronoi.append(num)
 
-            print("Selected centroid")
-            print(selected_centroid_voronoi)
-
             dictionary = dict()
 
             for i in range(len(self.profiles)):
@@ -152,7 +149,6 @@ class Structure:
                     self.distance_matrix[i, selected_centroid_voronoi])
                 dictionary[i] = selected_centroid_voronoi[index_min]
 
-            print("Grouping dictionary...")
             grouped_dict = dict()
             for key, value in dictionary.items():
                 if value not in grouped_dict:
@@ -160,11 +156,8 @@ class Structure:
                 else:
                     grouped_dict[value].append(key)
 
-            print(grouped_dict)
-
             avg_dictionary = dict()
 
-            print("Computing grouped dictionary...")
             for j in grouped_dict.keys():
                 temp_list = []
                 for index in grouped_dict[j]:
@@ -188,10 +181,9 @@ class Structure:
             df_score = pd.DataFrame(fd_score, columns=[
                                     "s" + str(i+1) for i in range(len(selected_centroid_voronoi))])
             df_score["centroid"] = avg_dictionary.keys()
-            print(df_score[df_score.columns[:-1]])
 
             # Compute cluster
-            kmeans = KMeans(n_clusters=2, random_state=0,
+            kmeans = KMeans(n_clusters=k, random_state=0,
                             n_init="auto").fit(df_score[df_score.columns[:-1]])
 
             mapping_dict = dict()
@@ -204,21 +196,33 @@ class Structure:
                 for i in grouped_dict[key]:
                     cluster_dict[i] = key
 
-            print(cluster_dict)
             sorted_cluster_dict = dict(sorted(cluster_dict.items()))
-            print(sorted_cluster_dict)
-            print(kmeans.labels_)
 
             df["boot_" + str(b)] = sorted_cluster_dict.values()
             df["b_" + str(b)] = df["boot_" + str(b)].replace(mapping_dict)
 
             df.drop(["boot_" + str(b)], axis=1, inplace=True)
 
-            print(df)
+        # print("Begin clustering matching")
+        # reference = df.iloc[:, 1]
+        # print(reference)
 
-        print("Begin clustering matching")
-        reference = df.iloc[:, 1]
-        print(reference)
+        df_clust = pd.DataFrame()
+
+        for j in range(k):
+            list_temp = []
+            for i in range(df.shape[0]):
+                list_temp.append(
+                    sum(df.iloc[i].values == j)/len(df.iloc[i].values))
+            df_clust["perc_" + str(j)] = list_temp
+
+        final_cluster = []
+
+        for i in range(df_clust.shape[0]):
+            final_cluster.append(np.argmax(df_clust.iloc[i].values))
+
+        df_clust["label"] = final_cluster
+        print(df_clust)
 
 
 def main():
@@ -352,7 +356,7 @@ def main():
 
     strc = Structure([a, b, c, d, e, f, g, h, i, l, m, n, o, p, q, r])
 
-    strc.cluster_now(4, 10, 0, 0.9)
+    strc.cluster_now(4, 1000, 2, 0.9)
 
 
 if __name__ == "__main__":
