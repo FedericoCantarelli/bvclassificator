@@ -73,7 +73,7 @@ def heatmap(data, row_labels, col_labels, ax=None,
     return im, cbar
 
 
-def plot_result(df):
+def plot_grid(df):
 
     matrix = df.pivot(index='y', columns='x', values='entropy').values
 
@@ -260,7 +260,7 @@ class Structure:
             n (int): Number of initial centroid for the Voronoi tessellation
             b (int): Number of bootstrap of the algorithm
             k (int): Nuber of cluster
-            p (int): Number of principal componets
+            fpca_percentage (float): Explained variance for which we want to retain principal components.
 
         Returns:
             tuple: Return a dataframe with clustered observations and space entropy in the form (x | y | cluster | space entropy) and average normalized entropy. 
