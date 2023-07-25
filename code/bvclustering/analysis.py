@@ -1,4 +1,3 @@
-from typing import Any
 import numpy as np
 import matplotlib.pyplot as plt
 import json
@@ -10,95 +9,31 @@ from sklearn.metrics.cluster import contingency_matrix
 from sklearn.cluster import KMeans
 from skfda.representation.grid import FDataGrid
 import warnings
+from scipy.stats import multivariate_normal
+
+# Suppress warnings
 warnings.filterwarnings('ignore')
 
 
-def heatmap(data, row_labels, col_labels, ax=None,
-            cbar_kw=None, cbarlabel="", **kwargs):
-    """
-    Create a heatmap from a numpy array and two lists of labels.
+def plot_results(df):
 
-    Parameters
-    ----------
-    data
-        A 2D numpy array of shape (M, N).
-    row_labels
-        A list or array of length M with the labels for the rows.
-    col_labels
-        A list or array of length N with the labels for the columns.
-    ax
-        A `matplotlib.axes.Axes` instance to which the heatmap is plotted.  If
-        not provided, use current axes or create a new one.  Optional.
-    cbar_kw
-        A dictionary with arguments to `matplotlib.Figure.colorbar`.  Optional.
-    cbarlabel
-        The label for the colorbar.  Optional.
-    **kwargs
-        All other arguments are forwarded to `imshow`.
-    """
+    matrix_entropy = df.pivot(index='y', columns='x', values='entropy').values
+    matrix_cluster = df.pivot(index='y', columns='x', values='label').values
 
-    if ax is None:
-        ax = plt.gca()
+    fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2)
 
-    if cbar_kw is None:
-        cbar_kw = {}
+    im = ax2.imshow(matrix_entropy)
 
-    # Plot the heatmap
-    im = ax.imshow(data, **kwargs)
+    ax2.set_xticks(np.arange(matrix_entropy.shape[1]), labels=[])
+    ax2.set_yticks(np.arange(matrix_entropy.shape[0]), labels=[])
 
-    # Create colorbar
-    cbar = ax.figure.colorbar(im, ax=ax, **cbar_kw)
-    cbar.ax.set_ylabel(cbarlabel, rotation=90, va="bottom")
+    ax2.tick_params(top=False, bottom=False,
+                    labeltop=False, labelbottom=False)
 
-    # Show all ticks and label them with the respective list entries.
-    ax.set_xticks(np.arange(data.shape[1]), labels=col_labels)
-    ax.set_yticks(np.arange(data.shape[0]), labels=row_labels)
-
-    # Let the horizontal axes labeling appear on top.
-    ax.tick_params(top=True, bottom=False,
-                   labeltop=True, labelbottom=False)
-
-    # Rotate the tick labels and set their alignment.
-    plt.setp(ax.get_xticklabels(), rotation=-30, ha="right",
-             rotation_mode="anchor")
-
-    # Turn spines off and create white grid.
-    ax.spines[:].set_visible(False)
-
-    ax.set_xticks(np.arange(data.shape[1]+1)-.5, minor=True)
-    ax.set_yticks(np.arange(data.shape[0]+1)-.5, minor=True)
-    ax.grid(which="minor", color="w", linestyle='-', linewidth=3)
-    ax.tick_params(which="minor", bottom=False, left=False)
-
-    return im, cbar
-
-
-def plot_grid(df):
-
-    matrix = df.pivot(index='y', columns='x', values='entropy').values
-
-    fig, ax = plt.subplots()
-
-    x_tick = [str(i) for i in range(matrix.shape[1])]
-    y_tick = [str(i) for i in range(matrix.shape[0])]
-
-    im, cbar = heatmap(matrix, x_tick, y_tick, ax=ax,
-                       cmap="viridis", cbarlabel="")
+    cbar = ax2.figure.colorbar(im, ax=ax2, fraction=0.046, pad=0.04)
+    ax2.set_title("Spatial Entropy")
 
     fig.tight_layout()
-    plt.show()
-
-    ax.set_xticks(np.arange(matrix.shape[0]), labels=[
-                  str(i) for i in range(matrix.shape[0])])
-    ax.set_yticks(np.arange(matrix.shape[1]), labels=[
-                  str(i) for i in range(matrix.shape[1])])
-
-    # Rotate the tick labels and set their alignment.
-    plt.setp(ax.get_xticklabels(), rotation=45,
-             ha="right", rotation_mode="anchor")
-
-    fig.colorbar(matrix, ax=ax, orientation='vertical', fraction=.1)
-
     plt.show()
 
 
@@ -252,8 +187,11 @@ class Structure:
 
     def id_from_coordinates(self, coordinates: tuple):
         return (self.df_coordinates[self.df_coordinates.t == coordinates].id.values[0])
+    
+    def coordinates_from_id(self, search_id:int):
+        return (self.df_coordinates[self.df_coordinates.id == str(search_id)].t.values[0])
 
-    def cluster_now(self, n: int, bootstrap: int, k: int, p: int):
+    def cluster_now(self, n: int, bootstrap: int, k: int, fpca_percentage: float):
         """Function to perform a bagging-voronoi clustering algorithm.
 
         Args:
@@ -266,46 +204,97 @@ class Structure:
             tuple: Return a dataframe with clustered observations and space entropy in the form (x | y | cluster | space entropy) and average normalized entropy. 
         """
 
-        # Dataframe for bootstrapping result
         df = pd.DataFrame()
 
         print("Bootstrapping...")
+
+        # Iterate the procedure b times
         for b in range(bootstrap):
-            progress_bar(b/bootstrap)
+
+            # Print progress bar as UI
+            #  progress_bar(b/bootstrap)
+
+            # List for selected centroid
             selected_centroid_voronoi = []
+
+            # Select n centroid for voronoi tesselation
             for i in range(n):
+                # Select random index
                 num = np.random.randint(len(self.profiles))
+
+                # If selected index is selected for the first time, append to the list
                 if num not in selected_centroid_voronoi:
                     selected_centroid_voronoi.append(num)
 
+                #  If it is already in the list, iterate untill a new centroid is selected
                 else:
                     while num in selected_centroid_voronoi:
                         num = np.random.randint(len(self.profiles))
                     selected_centroid_voronoi.append(num)
 
+            # Dictionary for grouping profiles to the closest centroid
+            # format {profile:closest centroid}
             dictionary = dict()
 
+            #  Iterate over all profiles and assign them to the closest centroid
             for i in range(len(self.profiles)):
                 index_min = np.argmin(
                     self.distance_matrix[i, selected_centroid_voronoi])
                 dictionary[i] = selected_centroid_voronoi[index_min]
 
+
+            # Group the previous dictionary in the format
+            # {centroid: closest profiles}
             grouped_dict = dict()
+            
+            # Perform grouping
             for key, value in dictionary.items():
                 if value not in grouped_dict:
                     grouped_dict[value] = [key]
                 else:
                     grouped_dict[value].append(key)
 
+            
+            # Compute representative function for each centroid
             avg_dictionary = dict()
+     
+            # Compute
+            centroid_coordinates_list = [self.coordinates_from_id(key) for key in grouped_dict.keys()]
+            
+            # Find maximum distance and minimum distance between al the centroids
+            temp_matrix = euclidean_distance_matrix(centroid_coordinates_list, centroid_coordinates_list)
+            dist_max_centroid = np.max(temp_matrix)
 
+            temp_matrix = temp_matrix[temp_matrix!=0]
+            dist_min_centroid = np.min(temp_matrix)
+
+            del temp_matrix
+
+            # Compute sigma
+            sigma = dist_max_centroid/dist_min_centroid
+            
+            # Compute covariance matrix for bivariate normal distribution
+            cov_matrix = sigma**2*np.identity(2)
+
+            # Compute representetive function for each centroid
             for j in grouped_dict.keys():
+                means = list(self.coordinates_from_id(j))
+                bivariate_gaussian = multivariate_normal(mean=means, cov=cov_matrix)
+                
                 temp_list = []
-                for index in grouped_dict[j]:
-                    temp_list.append(self.profiles[index].profile)
 
-                temp_array = np.array(temp_list)
-                avg_dictionary[j] = np.mean(temp_array, axis=0)
+                for index in grouped_dict[j]:
+                    pos = self.coordinates_from_id(index)
+                    w = bivariate_gaussian.pdf(pos)
+                    print(w)
+                    temp_list.append(self.profiles[index].profile*w)
+
+                
+                print(temp_list)
+
+                #avg_dictionary[j] = np.mean(temp_array, axis=0)
+            
+            
 
             # Create a FData object
             fda_matrix = np.zeros(
@@ -317,14 +306,25 @@ class Structure:
                            np.arange(0, self.time, 1/self.fps))
 
             #  Compute FPCA
-            fpca = FPCA(n_components=p)
+            fpca = FPCA(n_components=len(selected_centroid_voronoi))
+
             fd_score = fpca.fit_transform(fd)
+
+            cum_var = np.array(fpca.explained_variance_ratio_)
+            n_comp = np.min(np.where(cum_var > fpca_percentage))
+
             df_score = pd.DataFrame(fd_score, columns=[
-                                    "s" + str(i+1) for i in range(p)])
+                                    "s" + str(i+1) for i in range(len(selected_centroid_voronoi))])
+
             df_score["centroid"] = avg_dictionary.keys()
 
+            keep = ["s" + str(i+1) for i in range(n_comp+1)]
+            keep.append("centroid")
+
+            df_score = df_score[keep]
+
             # Compute cluster
-            kmeans = KMeans(n_clusters=k, random_state=0,
+            kmeans = KMeans(n_clusters=k,
                             n_init="auto").fit(df_score[df_score.columns[:-1]])
 
             mapping_dict = dict()
@@ -344,10 +344,10 @@ class Structure:
 
             df.drop(["boot_" + str(b)], axis=1, inplace=True)
 
-        print("\nBegin clustering matching")
+        print("\nBegin cluster matching")
         reference = df.loc[:, "b_0"]
 
-        for col in df.columns:
+        for col in df.columns[1:]:
             mapping = return_cluster_mapping(reference, df[col])
             df[col] = df[col].replace(mapping)
 
@@ -382,7 +382,7 @@ class Result:
 
 
 def main():
-    a = Profile(profile_id="a",
+    a = Profile(profile_id="0",
                 x=0,
                 y=0,
                 time=60,
@@ -390,7 +390,7 @@ def main():
                 profile=np.arange(0, 60),
                 is_in_control=True)
 
-    b = Profile(profile_id="b",
+    b = Profile(profile_id="1",
                 x=1,
                 y=0,
                 time=60,
@@ -398,7 +398,7 @@ def main():
                 profile=np.arange(0, 60),
                 is_in_control=False)
 
-    c = Profile(profile_id="c",
+    c = Profile(profile_id="2",
                 x=2,
                 y=0,
                 time=60,
@@ -406,7 +406,7 @@ def main():
                 profile=np.arange(0, 60),
                 is_in_control=True)
 
-    d = Profile(profile_id="d",
+    d = Profile(profile_id="3",
                 x=3,
                 y=0,
                 time=60,
@@ -414,7 +414,7 @@ def main():
                 profile=np.arange(0, 60),
                 is_in_control=True)
 
-    e = Profile(profile_id="e",
+    e = Profile(profile_id="4",
                 x=0,
                 y=1,
                 time=60,
@@ -422,7 +422,7 @@ def main():
                 profile=np.arange(0, 60),
                 is_in_control=True)
 
-    f = Profile(profile_id="f",
+    f = Profile(profile_id="5",
                 x=1,
                 y=1,
                 time=60,
@@ -430,7 +430,7 @@ def main():
                 profile=np.arange(0, 60),
                 is_in_control=False)
 
-    g = Profile(profile_id="g",
+    g = Profile(profile_id="6",
                 x=2,
                 y=1,
                 time=60,
@@ -438,7 +438,7 @@ def main():
                 profile=np.arange(0, 60),
                 is_in_control=True)
 
-    h = Profile(profile_id="h",
+    h = Profile(profile_id="7",
                 x=3,
                 y=1,
                 time=60,
@@ -446,7 +446,7 @@ def main():
                 profile=np.arange(0, 60),
                 is_in_control=True)
 
-    i = Profile(profile_id="i",
+    i = Profile(profile_id="8",
                 x=0,
                 y=2,
                 time=60,
@@ -454,7 +454,7 @@ def main():
                 profile=np.arange(0, 60),
                 is_in_control=True)
 
-    l = Profile(profile_id="l",
+    l = Profile(profile_id="9",
                 x=1,
                 y=2,
                 time=60,
@@ -462,7 +462,7 @@ def main():
                 profile=np.arange(0, 60),
                 is_in_control=False)
 
-    m = Profile(profile_id="m",
+    m = Profile(profile_id="10",
                 x=2,
                 y=2,
                 time=60,
@@ -470,7 +470,7 @@ def main():
                 profile=np.arange(0, 60),
                 is_in_control=True)
 
-    n = Profile(profile_id="n",
+    n = Profile(profile_id="11",
                 x=3,
                 y=2,
                 time=60,
@@ -478,7 +478,7 @@ def main():
                 profile=np.arange(0, 60),
                 is_in_control=True)
 
-    o = Profile(profile_id="o",
+    o = Profile(profile_id="12",
                 x=0,
                 y=3,
                 time=60,
@@ -486,7 +486,7 @@ def main():
                 profile=np.arange(0, 60),
                 is_in_control=True)
 
-    p = Profile(profile_id="p",
+    p = Profile(profile_id="13",
                 x=1,
                 y=3,
                 time=60,
@@ -494,7 +494,7 @@ def main():
                 profile=np.arange(0, 60),
                 is_in_control=False)
 
-    q = Profile(profile_id="q",
+    q = Profile(profile_id="14",
                 x=2,
                 y=3,
                 time=60,
@@ -502,7 +502,7 @@ def main():
                 profile=np.arange(0, 60),
                 is_in_control=True)
 
-    r = Profile(profile_id="r",
+    r = Profile(profile_id="15",
                 x=3,
                 y=3,
                 time=60,
@@ -512,10 +512,7 @@ def main():
 
     strc = Structure([a, b, c, d, e, f, g, h, i, l, m, n, o, p, q, r])
 
-    df, avg_entropy = strc.cluster_now(10, 10, 2, 3)
-
-    print(df)
-    print(avg_entropy)
+    df, avg_entropy = strc.cluster_now(10, 1, 2, 0.9)
 
     # df = pd.DataFrame(dict(a=[0.25, 1, 0, 0.4],
     #                        b=[0.25, 0, 1, 0.2],
@@ -525,7 +522,8 @@ def main():
 
     # print(get_spatial_entropy(df))
 
-    print(plot_grid(df))
+    print(df)
+    #plot_results(df)
 
 
 if __name__ == "__main__":
