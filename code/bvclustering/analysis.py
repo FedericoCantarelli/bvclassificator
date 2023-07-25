@@ -1,3 +1,4 @@
+from typing import Any
 import numpy as np
 import matplotlib.pyplot as plt
 import json
@@ -10,6 +11,129 @@ from sklearn.cluster import KMeans
 from skfda.representation.grid import FDataGrid
 import warnings
 warnings.filterwarnings('ignore')
+
+
+def heatmap(data, row_labels, col_labels, ax=None,
+            cbar_kw=None, cbarlabel="", **kwargs):
+    """
+    Create a heatmap from a numpy array and two lists of labels.
+
+    Parameters
+    ----------
+    data
+        A 2D numpy array of shape (M, N).
+    row_labels
+        A list or array of length M with the labels for the rows.
+    col_labels
+        A list or array of length N with the labels for the columns.
+    ax
+        A `matplotlib.axes.Axes` instance to which the heatmap is plotted.  If
+        not provided, use current axes or create a new one.  Optional.
+    cbar_kw
+        A dictionary with arguments to `matplotlib.Figure.colorbar`.  Optional.
+    cbarlabel
+        The label for the colorbar.  Optional.
+    **kwargs
+        All other arguments are forwarded to `imshow`.
+    """
+
+    if ax is None:
+        ax = plt.gca()
+
+    if cbar_kw is None:
+        cbar_kw = {}
+
+    # Plot the heatmap
+    im = ax.imshow(data, **kwargs)
+
+    # Create colorbar
+    cbar = ax.figure.colorbar(im, ax=ax, **cbar_kw)
+    cbar.ax.set_ylabel(cbarlabel, rotation=90, va="bottom")
+
+    # Show all ticks and label them with the respective list entries.
+    ax.set_xticks(np.arange(data.shape[1]), labels=col_labels)
+    ax.set_yticks(np.arange(data.shape[0]), labels=row_labels)
+
+    # Let the horizontal axes labeling appear on top.
+    ax.tick_params(top=True, bottom=False,
+                   labeltop=True, labelbottom=False)
+
+    # Rotate the tick labels and set their alignment.
+    plt.setp(ax.get_xticklabels(), rotation=-30, ha="right",
+             rotation_mode="anchor")
+
+    # Turn spines off and create white grid.
+    ax.spines[:].set_visible(False)
+
+    ax.set_xticks(np.arange(data.shape[1]+1)-.5, minor=True)
+    ax.set_yticks(np.arange(data.shape[0]+1)-.5, minor=True)
+    ax.grid(which="minor", color="w", linestyle='-', linewidth=3)
+    ax.tick_params(which="minor", bottom=False, left=False)
+
+    return im, cbar
+
+
+def plot_result(df):
+
+    matrix = df.pivot(index='y', columns='x', values='entropy').values
+
+    fig, ax = plt.subplots()
+
+    x_tick = [str(i) for i in range(matrix.shape[1])]
+    y_tick = [str(i) for i in range(matrix.shape[0])]
+
+    im, cbar = heatmap(matrix, x_tick, y_tick, ax=ax,
+                       cmap="viridis", cbarlabel="")
+
+    fig.tight_layout()
+    plt.show()
+
+    ax.set_xticks(np.arange(matrix.shape[0]), labels=[
+                  str(i) for i in range(matrix.shape[0])])
+    ax.set_yticks(np.arange(matrix.shape[1]), labels=[
+                  str(i) for i in range(matrix.shape[1])])
+
+    # Rotate the tick labels and set their alignment.
+    plt.setp(ax.get_xticklabels(), rotation=45,
+             ha="right", rotation_mode="anchor")
+
+    fig.colorbar(matrix, ax=ax, orientation='vertical', fraction=.1)
+
+    plt.show()
+
+
+def get_spatial_entropy(df):
+    columns = df.columns.drop("label")
+    entropies = []
+
+    for i in range(df.shape[0]):
+        p_vector = np.array(df[columns].iloc[i].values)
+        if any(p_vector == 1):
+            entropies.append(0)
+
+        else:
+            log_p = np.log10(p_vector)
+            e = -np.sum(p_vector*log_p)
+            entropies.append(e)
+
+    return entropies
+
+
+def progress_bar(percent, width=40):
+    """
+    Function to print a simple progress bar in the output console
+
+    Args:
+        percent (int): Percentage of the completed work.
+        width (int, optional): Width of the progress bar. Defaults to 40.
+    """
+    percent = int(percent*100)
+    left = width * percent // 100
+    right = width - left
+    tags = "=" * left
+    spaces = " " * right
+    percents = f"{percent:.0f}%"
+    print("\r[", tags, spaces, "] ", percents, sep="", end="", flush=True)
 
 
 def euclidean_distance_matrix(x: np.ndarray, y: np.ndarray) -> np.ndarray:
@@ -32,6 +156,24 @@ def euclidean_distance_matrix(x: np.ndarray, y: np.ndarray) -> np.ndarray:
             distance[i, j] = math.sqrt(
                 (x[i][0] - y[j][0]) ** 2 + (x[i][1] - y[j][1]) ** 2)
     return distance
+
+
+def return_cluster_mapping(reference, testing):
+    # Contingency matrix automatically reorder cluster labels
+
+    matrix = contingency_matrix(testing, reference)
+
+    mapping_dict = dict()
+
+    unique_reference = np.asarray(list(set(reference)))
+    unique_testing = np.asarray(list(set(testing)))
+
+    indexes_min = np.argmax(matrix, axis=1)
+
+    for key, item in zip(unique_testing, unique_reference[indexes_min]):
+        mapping_dict[key] = item
+
+    return mapping_dict
 
 
 class Profile:
@@ -111,26 +253,25 @@ class Structure:
     def id_from_coordinates(self, coordinates: tuple):
         return (self.df_coordinates[self.df_coordinates.t == coordinates].id.values[0])
 
-    def cluster_now(self, n: int, bootstrap: int, k: int, fpca_percentage: float):
+    def cluster_now(self, n: int, bootstrap: int, k: int, p: int):
         """Function to perform a bagging-voronoi clustering algorithm.
 
         Args:
             n (int): Number of initial centroid for the Voronoi tessellation
             b (int): Number of bootstrap of the algorithm
             k (int): Nuber of cluster
-            fpca_percentage (float): Percentage of variance to retain in the FPCA
+            p (int): Number of principal componets
 
         Returns:
-            tuple: Return a dataframe with clustered observations and space entropy in the form (x | y | cluster | space entropy). 
+            tuple: Return a dataframe with clustered observations and space entropy in the form (x | y | cluster | space entropy) and average normalized entropy. 
         """
-        #  Check if there is at least 3 observations per centroid on average
-        assert n < len(self.profiles)//3
 
         # Dataframe for bootstrapping result
         df = pd.DataFrame()
 
+        print("Bootstrapping...")
         for b in range(bootstrap):
-            print("Starting bootstrap {}".format(b))
+            progress_bar(b/bootstrap)
             selected_centroid_voronoi = []
             for i in range(n):
                 num = np.random.randint(len(self.profiles))
@@ -176,10 +317,10 @@ class Structure:
                            np.arange(0, self.time, 1/self.fps))
 
             #  Compute FPCA
-            fpca = FPCA(n_components=len(selected_centroid_voronoi))
+            fpca = FPCA(n_components=p)
             fd_score = fpca.fit_transform(fd)
             df_score = pd.DataFrame(fd_score, columns=[
-                                    "s" + str(i+1) for i in range(len(selected_centroid_voronoi))])
+                                    "s" + str(i+1) for i in range(p)])
             df_score["centroid"] = avg_dictionary.keys()
 
             # Compute cluster
@@ -203,9 +344,12 @@ class Structure:
 
             df.drop(["boot_" + str(b)], axis=1, inplace=True)
 
-        # print("Begin clustering matching")
-        # reference = df.iloc[:, 1]
-        # print(reference)
+        print("\nBegin clustering matching")
+        reference = df.loc[:, "b_0"]
+
+        for col in df.columns:
+            mapping = return_cluster_mapping(reference, df[col])
+            df[col] = df[col].replace(mapping)
 
         df_clust = pd.DataFrame()
 
@@ -222,7 +366,19 @@ class Structure:
             final_cluster.append(np.argmax(df_clust.iloc[i].values))
 
         df_clust["label"] = final_cluster
-        print(df_clust)
+
+        df_clust["entropy"] = get_spatial_entropy(df_clust)
+
+        df_clust["normalized_entropy"] = df_clust["entropy"]/np.log10(k)
+
+        df_clust = pd.concat([df_clust, self.df_coordinates], axis=1)
+
+        return df_clust, np.sum(df_clust.normalized_entropy)/len(self.profiles)
+
+
+class Result:
+    def __init__(self) -> None:
+        pass
 
 
 def main():
@@ -356,7 +512,20 @@ def main():
 
     strc = Structure([a, b, c, d, e, f, g, h, i, l, m, n, o, p, q, r])
 
-    strc.cluster_now(4, 1000, 2, 0.9)
+    df, avg_entropy = strc.cluster_now(10, 10, 2, 3)
+
+    print(df)
+    print(avg_entropy)
+
+    # df = pd.DataFrame(dict(a=[0.25, 1, 0, 0.4],
+    #                        b=[0.25, 0, 1, 0.2],
+    #                        c=[0.25, 0, 0, 0.2],
+    #                        d=[0.25, 0, 0, 0.2],
+    #                        label=[1, 0, 1, 0]))
+
+    # print(get_spatial_entropy(df))
+
+    print(plot_grid(df))
 
 
 if __name__ == "__main__":
