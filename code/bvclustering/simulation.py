@@ -6,15 +6,16 @@ from tabulate import tabulate
 
 
 class Simulation(Profile):
-    def __init__(self, profile_id: str, x: float, y: float, beta0: tuple, beta1: tuple, beta2_coeff: float, beta2_slope: float, error: tuple, is_in_control: bool = True, deviation_entity: float = None,
+    def __init__(self, profile_id: str, x: float, y: float, beta0: tuple, beta1: tuple, beta2_coeff: float, beta2_slope: float, error: tuple, deviation_entity: float = None,
                  time: float = 60, fps: int = 30) -> None:
 
         super().__init__(profile_id=profile_id, 
                          x=x, 
                          y=y, 
-                         is_in_control=is_in_control, 
                          time=time, 
                          fps=fps)
+        
+        self.is_in_control = True if deviation_entity is None else False
 
         self.beta0 = beta0
         self.beta1 = beta1
@@ -22,6 +23,8 @@ class Simulation(Profile):
         self.beta2_slope = beta2_slope
         self.error = error
         self.deviation_entity = deviation_entity
+
+        self.time_evolution = np.arange(0, self.time, 1/self.fps)
 
         self.profile = np.zeros_like(self.time_evolution)
 
@@ -33,8 +36,6 @@ class Simulation(Profile):
 
         self.profile_function = np.zeros_like(self.time_evolution)
 
-        if not is_in_control:
-            assert deviation_entity is not None, "If is_in_control = False, you must provide a deviation entity."
 
     def run(self):
         e = np.random.normal(

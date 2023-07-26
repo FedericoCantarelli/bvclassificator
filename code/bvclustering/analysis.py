@@ -16,21 +16,34 @@ warnings.filterwarnings('ignore')
 
 
 def plot_results(df):
+    """_summary_
 
-    matrix_entropy = df.pivot(index='y', columns='x', values='entropy').values
+    Args:
+        df (pd.DataFrame): Dataframe in the format (perc_i | label | entropy | normalized_entropy | id | x | y | t | is_in_control)
+    """
+
+    matrix_entropy = df.pivot(index='y', columns='x',
+                              values='entropy').values
+
     matrix_cluster = df.pivot(index='y', columns='x', values='label').values
 
     fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2)
 
-    im = ax2.imshow(matrix_entropy)
+    cmap = plt.cm.get_cmap('Dark2', np.max(matrix_cluster) + 1)
+    im = ax1.imshow(matrix_cluster, cmap=cmap)
 
-    ax2.set_xticks(np.arange(matrix_entropy.shape[1]), labels=[])
-    ax2.set_yticks(np.arange(matrix_entropy.shape[0]), labels=[])
+    ax1.set_xticks([], labels=[])
+    ax1.set_yticks([], labels=[])
 
-    ax2.tick_params(top=False, bottom=False,
-                    labeltop=False, labelbottom=False)
+    ax1.set_title("Clustering Result")
 
-    cbar = ax2.figure.colorbar(im, ax=ax2, fraction=0.046, pad=0.04)
+    im2 = ax2.imshow(matrix_entropy)
+
+    ax2.set_xticks([], labels=[])
+    ax2.set_yticks([], labels=[])
+
+    cbar2 = ax2.figure.colorbar(im2, ax=ax2, fraction=0.046, pad=0.04)
+    cbar2.remove()
     ax2.set_title("Spatial Entropy")
 
     fig.tight_layout()
@@ -38,18 +51,22 @@ def plot_results(df):
 
 
 def get_spatial_entropy(df):
+    """_summary_
+
+    Args:
+        df (pd.DataFrame): Dataframe in the format (perc_i | label) where perc_i is the frequency with which the site is labelled as cluster i
+
+    Returns:
+        _type_: _description_
+    """
     columns = df.columns.drop("label")
     entropies = []
 
     for i in range(df.shape[0]):
-        p_vector = np.array(df[columns].iloc[i].values)
-        if any(p_vector == 1):
-            entropies.append(0)
-
-        else:
-            log_p = np.log10(p_vector)
-            e = -np.sum(p_vector*log_p)
-            entropies.append(e)
+        p_vector = np.array(df[columns].iloc[i].values) + 1e-10
+        log_p = np.log10(p_vector)
+        e = -np.sum(p_vector*log_p)
+        entropies.append(e)
 
     return entropies
 
@@ -94,8 +111,17 @@ def euclidean_distance_matrix(x: np.ndarray, y: np.ndarray) -> np.ndarray:
 
 
 def return_cluster_mapping(reference, testing):
-    # Contingency matrix automatically reorder cluster labels
+    """_summary_
 
+    Args:
+        reference (pd.Series): The label results of the first clustering
+        testing (pd.Series): The label results of the second clustering
+
+    Returns:
+        dict: Return the mapping_dict in the format {bootstra_label:reference_label}
+    """
+
+    # Contingency matrix automatically reorder cluster labels
     matrix = contingency_matrix(testing, reference)
 
     mapping_dict = dict()
@@ -112,9 +138,8 @@ def return_cluster_mapping(reference, testing):
 
 
 class Profile:
-    def __init__(self, profile_id: str, x: float, y: float, time: float, fps: float, profile: np.ndarray = None, is_in_control: bool = True) -> None:
+    def __init__(self, profile_id: str, x: float, y: float, time: float, fps: float, profile: np.ndarray = None) -> None:
         self.profile_id = profile_id
-        self.is_in_control = is_in_control
         self.x = x
         self.y = y
         self.profile = profile
@@ -148,8 +173,7 @@ class Profile:
         return cls(dictionary["profile_id"],
                    dictionary["x"],
                    dictionary["y"],
-                   np.ndarray(dictionary["profile"]),
-                   dictionary["is_in_control"])
+                   np.ndarray(dictionary["profile"]))
 
 
 class Structure:
@@ -158,16 +182,14 @@ class Structure:
         self.coordinates = dict(id=[],
                                 x=[],
                                 y=[],
-                                t=[],
-                                is_in_control=[])
+                                t=[])
 
         for each_profile in profiles:
             self.coordinates["id"].append(each_profile.profile_id)
             self.coordinates["x"].append(each_profile.x)
             self.coordinates["y"].append(each_profile.y)
             self.coordinates["t"].append(each_profile.position)
-            self.coordinates["is_in_control"].append(
-                each_profile.is_in_control)
+        
 
         self.df_coordinates = pd.DataFrame.from_dict(self.coordinates)
         self.distance_matrix = euclidean_distance_matrix(
@@ -176,19 +198,19 @@ class Structure:
         self.time = self.profiles[0].time
         self.fps = self.profiles[0].fps
 
-    def print_df(self):
-        print(self.df_coordinates)
+    # def print_df(self):
+    #     print(self.df_coordinates)
 
-    def print_dm(self):
-        print(self.distance_matrix)
+    # def print_dm(self):
+    #     print(self.distance_matrix)
 
     def index_from_coordinates(self, coordinates: tuple):
         return (int(self.df_coordinates[self.df_coordinates.t == coordinates].index.values[0]))
 
     def id_from_coordinates(self, coordinates: tuple):
         return (self.df_coordinates[self.df_coordinates.t == coordinates].id.values[0])
-    
-    def coordinates_from_id(self, search_id:int):
+
+    def coordinates_from_id(self, search_id: int):
         return (self.df_coordinates[self.df_coordinates.id == str(search_id)].t.values[0])
 
     def cluster_now(self, n: int, bootstrap: int, k: int, fpca_percentage: float):
@@ -201,7 +223,8 @@ class Structure:
             fpca_percentage (float): Explained variance for which we want to retain principal components.
 
         Returns:
-            tuple: Return a dataframe with clustered observations and space entropy in the form (x | y | cluster | space entropy) and average normalized entropy. 
+            pd.DataFrame, float: Return a dataframe with clustered observations and space entropy in the form 
+            (perc_i | label | entropy | normalized_entropy | id | x | y | t ) and average normalized entropy. 
         """
 
         df = pd.DataFrame()
@@ -212,7 +235,7 @@ class Structure:
         for b in range(bootstrap):
 
             # Print progress bar as UI
-            #  progress_bar(b/bootstrap)
+            progress_bar(b/bootstrap)
 
             # List for selected centroid
             selected_centroid_voronoi = []
@@ -242,11 +265,10 @@ class Structure:
                     self.distance_matrix[i, selected_centroid_voronoi])
                 dictionary[i] = selected_centroid_voronoi[index_min]
 
-
             # Group the previous dictionary in the format
             # {centroid: closest profiles}
             grouped_dict = dict()
-            
+
             # Perform grouping
             for key, value in dictionary.items():
                 if value not in grouped_dict:
@@ -254,47 +276,57 @@ class Structure:
                 else:
                     grouped_dict[value].append(key)
 
-            
             # Compute representative function for each centroid
             avg_dictionary = dict()
-     
+
             # Compute
-            centroid_coordinates_list = [self.coordinates_from_id(key) for key in grouped_dict.keys()]
-            
+            centroid_coordinates_list = [self.coordinates_from_id(
+                key) for key in grouped_dict.keys()]
+
             # Find maximum distance and minimum distance between al the centroids
-            temp_matrix = euclidean_distance_matrix(centroid_coordinates_list, centroid_coordinates_list)
+            temp_matrix = euclidean_distance_matrix(
+                centroid_coordinates_list, centroid_coordinates_list)
             dist_max_centroid = np.max(temp_matrix)
 
-            temp_matrix = temp_matrix[temp_matrix!=0]
+            temp_matrix = temp_matrix[temp_matrix != 0]
             dist_min_centroid = np.min(temp_matrix)
 
             del temp_matrix
 
-            # Compute sigma
+            #  Compute sigma
             sigma = dist_max_centroid/dist_min_centroid
-            
+
             # Compute covariance matrix for bivariate normal distribution
             cov_matrix = sigma**2*np.identity(2)
 
             # Compute representetive function for each centroid
             for j in grouped_dict.keys():
+
+                # Gaussian weights centered in Zi
                 means = list(self.coordinates_from_id(j))
-                bivariate_gaussian = multivariate_normal(mean=means, cov=cov_matrix)
-                
+
+                # Compute the weight
+                bivariate_gaussian = multivariate_normal(
+                    mean=means, cov=cov_matrix)
+
+                # Keeo track of profile
                 temp_list = []
 
+                # Keep track of weights
+                weights_list = []
+
+                # Multiply each profile for the correspondent weight
                 for index in grouped_dict[j]:
                     pos = self.coordinates_from_id(index)
                     w = bivariate_gaussian.pdf(pos)
-                    print(w)
+                    weights_list.append(w)
                     temp_list.append(self.profiles[index].profile*w)
 
-                
-                print(temp_list)
+                temp_array = np.array(temp_list)
 
-                #avg_dictionary[j] = np.mean(temp_array, axis=0)
-            
-            
+                # Compute final dictionary
+                avg_dictionary[j] = np.sum(
+                    temp_array, axis=0)/sum(weights_list)
 
             # Create a FData object
             fda_matrix = np.zeros(
@@ -308,35 +340,43 @@ class Structure:
             #  Compute FPCA
             fpca = FPCA(n_components=len(selected_centroid_voronoi))
 
+            # Compute scores
             fd_score = fpca.fit_transform(fd)
 
+            #  Find cumulative explained variance
             cum_var = np.array(fpca.explained_variance_ratio_)
             n_comp = np.min(np.where(cum_var > fpca_percentage))
 
             df_score = pd.DataFrame(fd_score, columns=[
                                     "s" + str(i+1) for i in range(len(selected_centroid_voronoi))])
 
+            # Keep track of centroid for debugging reason
             df_score["centroid"] = avg_dictionary.keys()
 
             keep = ["s" + str(i+1) for i in range(n_comp+1)]
             keep.append("centroid")
 
+            #  Prepare the df for the clustering stage
             df_score = df_score[keep]
 
-            # Compute cluster
+            # Find clusterin cluster
             kmeans = KMeans(n_clusters=k,
                             n_init="auto").fit(df_score[df_score.columns[:-1]])
 
+            # Find the mapping dictionary for centroid and cluster labels
+            # The format is {centroid:cluster label}
             mapping_dict = dict()
-
             for key, cluster in zip(grouped_dict.keys(), kmeans.labels_):
                 mapping_dict[key] = cluster
+
+            #  Find the single site to centroid mapping dictionary
 
             cluster_dict = dict()
             for key in grouped_dict.keys():
                 for i in grouped_dict[key]:
                     cluster_dict[i] = key
 
+            #  Sort the dictionary according in order to have the all the sites in order
             sorted_cluster_dict = dict(sorted(cluster_dict.items()))
 
             df["boot_" + str(b)] = sorted_cluster_dict.values()
@@ -344,15 +384,24 @@ class Structure:
 
             df.drop(["boot_" + str(b)], axis=1, inplace=True)
 
-        print("\nBegin cluster matching")
+        # Perform cluster matching using contingency matrix
+        print("\nCluster matching...")
+
+        # Save first bootstrap as reference
         reference = df.loc[:, "b_0"]
 
+        # For all the remaining bootstraps do clusters matching
         for col in df.columns[1:]:
+
+            # Find the map
             mapping = return_cluster_mapping(reference, df[col])
+
+            # Replace the labels of the old cluster to the label of the new cluster
             df[col] = df[col].replace(mapping)
 
         df_clust = pd.DataFrame()
 
+        #  Find percentage of each site to be labeled with that specific label
         for j in range(k):
             list_temp = []
             for i in range(df.shape[0]):
@@ -365,19 +414,22 @@ class Structure:
         for i in range(df_clust.shape[0]):
             final_cluster.append(np.argmax(df_clust.iloc[i].values))
 
+        #  Add final label to the dataframe
         df_clust["label"] = final_cluster
 
+        #  Compute spatial entropy and add column
         df_clust["entropy"] = get_spatial_entropy(df_clust)
 
+        #  Compute normalized spatial entropy and add column
         df_clust["normalized_entropy"] = df_clust["entropy"]/np.log10(k)
 
+        #  Add coordinates to final dataframe
         df_clust = pd.concat([df_clust, self.df_coordinates], axis=1)
 
+        # Return clustered dataframe and average normalized entropy
         return df_clust, np.sum(df_clust.normalized_entropy)/len(self.profiles)
 
-
-class Result:
-    def __init__(self) -> None:
+    def evaluate(self, ground_truth: list) -> tuple:
         pass
 
 
@@ -385,134 +437,118 @@ def main():
     a = Profile(profile_id="0",
                 x=0,
                 y=0,
-                time=60,
+                time=10,
                 fps=1,
-                profile=np.arange(0, 60),
-                is_in_control=True)
+                profile=np.arange(70, 80))
 
     b = Profile(profile_id="1",
                 x=1,
                 y=0,
-                time=60,
+                time=10,
                 fps=1,
-                profile=np.arange(0, 60),
-                is_in_control=False)
+                profile=np.arange(0, 10))
 
     c = Profile(profile_id="2",
                 x=2,
                 y=0,
-                time=60,
+                time=10,
                 fps=1,
-                profile=np.arange(0, 60),
-                is_in_control=True)
+                profile=np.arange(0, 10))
 
     d = Profile(profile_id="3",
                 x=3,
                 y=0,
-                time=60,
+                time=10,
                 fps=1,
-                profile=np.arange(0, 60),
-                is_in_control=True)
+                profile=np.arange(0, 10))
 
     e = Profile(profile_id="4",
                 x=0,
                 y=1,
-                time=60,
+                time=10,
                 fps=1,
-                profile=np.arange(0, 60),
-                is_in_control=True)
+                profile=np.arange(0, 10))
 
     f = Profile(profile_id="5",
                 x=1,
                 y=1,
-                time=60,
+                time=10,
                 fps=1,
-                profile=np.arange(0, 60),
-                is_in_control=False)
+                profile=np.arange(0, 10))
 
     g = Profile(profile_id="6",
                 x=2,
                 y=1,
-                time=60,
+                time=10,
                 fps=1,
-                profile=np.arange(0, 60),
-                is_in_control=True)
+                profile=np.arange(0, 10))
 
     h = Profile(profile_id="7",
                 x=3,
                 y=1,
-                time=60,
+                time=10,
                 fps=1,
-                profile=np.arange(0, 60),
-                is_in_control=True)
+                profile=np.arange(0, 10))
 
     i = Profile(profile_id="8",
                 x=0,
                 y=2,
-                time=60,
+                time=10,
                 fps=1,
-                profile=np.arange(0, 60),
-                is_in_control=True)
+                profile=np.arange(0, 10))
 
     l = Profile(profile_id="9",
                 x=1,
                 y=2,
-                time=60,
+                time=10,
                 fps=1,
-                profile=np.arange(0, 60),
-                is_in_control=False)
+                profile=np.arange(0, 10))
 
     m = Profile(profile_id="10",
                 x=2,
                 y=2,
-                time=60,
+                time=10,
                 fps=1,
-                profile=np.arange(0, 60),
-                is_in_control=True)
+                profile=np.arange(0, 10))
 
     n = Profile(profile_id="11",
                 x=3,
                 y=2,
-                time=60,
+                time=10,
                 fps=1,
-                profile=np.arange(0, 60),
-                is_in_control=True)
+                profile=np.arange(0, 10))
 
     o = Profile(profile_id="12",
                 x=0,
                 y=3,
-                time=60,
+                time=10,
                 fps=1,
-                profile=np.arange(0, 60),
-                is_in_control=True)
+                profile=np.arange(0, 10))
 
     p = Profile(profile_id="13",
                 x=1,
                 y=3,
-                time=60,
+                time=10,
                 fps=1,
-                profile=np.arange(0, 60),
-                is_in_control=False)
+                profile=np.arange(0, 10))
 
     q = Profile(profile_id="14",
                 x=2,
                 y=3,
-                time=60,
+                time=10,
                 fps=1,
-                profile=np.arange(0, 60),
-                is_in_control=True)
+                profile=np.arange(0, 10))
 
     r = Profile(profile_id="15",
                 x=3,
                 y=3,
-                time=60,
+                time=10,
                 fps=1,
-                profile=np.arange(10, 70),
-                is_in_control=True)
+                profile=np.arange(10, 20))
 
     strc = Structure([a, b, c, d, e, f, g, h, i, l, m, n, o, p, q, r])
 
-    df, avg_entropy = strc.cluster_now(10, 1, 2, 0.9)
+    df, avg_entropy = strc.cluster_now(10, 100, 3, 0.9)
 
     # df = pd.DataFrame(dict(a=[0.25, 1, 0, 0.4],
     #                        b=[0.25, 0, 1, 0.2],
@@ -523,7 +559,7 @@ def main():
     # print(get_spatial_entropy(df))
 
     print(df)
-    #plot_results(df)
+    plot_results(df)
 
 
 if __name__ == "__main__":
