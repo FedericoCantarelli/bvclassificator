@@ -8,11 +8,7 @@ from skfda.preprocessing.dim_reduction import FPCA
 from sklearn.metrics.cluster import contingency_matrix
 from sklearn.cluster import KMeans
 from skfda.representation.grid import FDataGrid
-import warnings
 from scipy.stats import multivariate_normal
-
-# Suppress warnings
-warnings.filterwarnings('ignore')
 
 
 def plot_results(df):
@@ -189,7 +185,6 @@ class Structure:
             self.coordinates["x"].append(each_profile.x)
             self.coordinates["y"].append(each_profile.y)
             self.coordinates["t"].append(each_profile.position)
-        
 
         self.df_coordinates = pd.DataFrame.from_dict(self.coordinates)
         self.distance_matrix = euclidean_distance_matrix(
@@ -343,13 +338,12 @@ class Structure:
             # Compute scores
             fd_score = fpca.fit_transform(fd)
 
-
             df_score = pd.DataFrame(fd_score, columns=[
                                     "s" + str(i+1) for i in range(p)])
 
             # Keep track of centroid for debugging reason
             df_score["centroid"] = avg_dictionary.keys()
-            
+
             # Find clusterin cluster
             kmeans = KMeans(n_clusters=k,
                             n_init="auto").fit(df_score[df_score.columns[:-1]])
@@ -422,136 +416,3 @@ class Structure:
 
     def evaluate(self, ground_truth: list) -> tuple:
         pass
-
-
-def main():
-    a = Profile(profile_id="0",
-                x=0,
-                y=0,
-                time=10,
-                fps=1,
-                profile=np.arange(70, 80))
-
-    b = Profile(profile_id="1",
-                x=1,
-                y=0,
-                time=10,
-                fps=1,
-                profile=np.arange(0, 10))
-
-    c = Profile(profile_id="2",
-                x=2,
-                y=0,
-                time=10,
-                fps=1,
-                profile=np.arange(0, 10))
-
-    d = Profile(profile_id="3",
-                x=3,
-                y=0,
-                time=10,
-                fps=1,
-                profile=np.arange(0, 10))
-
-    e = Profile(profile_id="4",
-                x=0,
-                y=1,
-                time=10,
-                fps=1,
-                profile=np.arange(0, 10))
-
-    f = Profile(profile_id="5",
-                x=1,
-                y=1,
-                time=10,
-                fps=1,
-                profile=np.arange(0, 10))
-
-    g = Profile(profile_id="6",
-                x=2,
-                y=1,
-                time=10,
-                fps=1,
-                profile=np.arange(0, 10))
-
-    h = Profile(profile_id="7",
-                x=3,
-                y=1,
-                time=10,
-                fps=1,
-                profile=np.arange(0, 10))
-
-    i = Profile(profile_id="8",
-                x=0,
-                y=2,
-                time=10,
-                fps=1,
-                profile=np.arange(0, 10))
-
-    l = Profile(profile_id="9",
-                x=1,
-                y=2,
-                time=10,
-                fps=1,
-                profile=np.arange(0, 10))
-
-    m = Profile(profile_id="10",
-                x=2,
-                y=2,
-                time=10,
-                fps=1,
-                profile=np.arange(0, 10))
-
-    n = Profile(profile_id="11",
-                x=3,
-                y=2,
-                time=10,
-                fps=1,
-                profile=np.arange(0, 10))
-
-    o = Profile(profile_id="12",
-                x=0,
-                y=3,
-                time=10,
-                fps=1,
-                profile=np.arange(0, 10))
-
-    p = Profile(profile_id="13",
-                x=1,
-                y=3,
-                time=10,
-                fps=1,
-                profile=np.arange(0, 10))
-
-    q = Profile(profile_id="14",
-                x=2,
-                y=3,
-                time=10,
-                fps=1,
-                profile=np.arange(0, 10))
-
-    r = Profile(profile_id="15",
-                x=3,
-                y=3,
-                time=10,
-                fps=1,
-                profile=np.arange(10, 20))
-
-    strc = Structure([a, b, c, d, e, f, g, h, i, l, m, n, o, p, q, r])
-
-    df, avg_entropy = strc.cluster_now(10, 100, 3, 3)
-
-    # df = pd.DataFrame(dict(a=[0.25, 1, 0, 0.4],
-    #                        b=[0.25, 0, 1, 0.2],
-    #                        c=[0.25, 0, 0, 0.2],
-    #                        d=[0.25, 0, 0, 0.2],
-    #                        label=[1, 0, 1, 0]))
-
-    # print(get_spatial_entropy(df))
-
-    print(df)
-    plot_results(df)
-
-
-if __name__ == "__main__":
-    main()
