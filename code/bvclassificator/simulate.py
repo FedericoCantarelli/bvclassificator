@@ -4,6 +4,7 @@ import matplotlib.gridspec as gridspec
 
 DIMENSION = 3
 
+
 class Profile:
     def __init__(self, x: int, y: int, n_frames: int, time_period: int) -> None:
         self.x = x
@@ -15,7 +16,7 @@ class Profile:
         self.func_profile = None
         self.err_params = None
 
-    def simulate(self, sim_params: dict, loc: float, scale: float) -> None:
+    def simulate(self, sim_params: dict, loc: float, scale: float, with_noise: True) -> None:
         """_summary_
 
         Args:
@@ -24,10 +25,16 @@ class Profile:
             scale (float): Standard deviation of error normal distribution
         """
         self.in_control = sim_params["in_control"]
-        self.errors = np.random.normal(loc, scale, self.time_frames.shape[0])
         self.func_profile = sim_params["function"](self.time_frames)
-        self.profile = self.func_profile + self.errors
-        self.err_params = (loc, scale)
+
+        if with_noise:
+            self.errors = np.random.normal(
+                loc, scale, self.time_frames.shape[0])
+            self.profile = self.func_profile + self.errors
+            self.err_params = (loc, scale)
+
+        else:
+            self.profile = self.func_profile
 
     def plot(self) -> None:
         assert self.profile is not None and self.errors is not None and self.func_profile is not None, "Not enough data to plot a summary for the profile"
@@ -44,20 +51,21 @@ class Profile:
         ax2.scatter(self.time_frames, self.errors, s=12)
         ax2.axhline(y=self.err_params[0], color="orange",
                     linestyle="--", linewidth=1.5)
-        ax2.set_title(f"Errors from a N({self.err_params[0]},{self.err_params[1]})")
+        ax2.set_title(
+            f"Errors from a N({self.err_params[0]},{self.err_params[1]})")
         ax3.plot(self.func_profile)
         ax3.set_xticks([])
         ax3.yaxis.tick_right()
         ax3.set_title("Profile Function")
-        
+
         ax4.hist(self.errors, "auto", edgecolor="black",
                  alpha=0.8, orientation="horizontal", density=True)
         ax4.set_title("Error Distribution")
         ax4.set_yticks([])
-        
+
         plt.tight_layout()
         plt.show()
-    
+
     @property
     def index(self) -> int:
         return self.x + self.y * DIMENSION
@@ -65,7 +73,6 @@ class Profile:
     @property
     def coordinates(self) -> tuple:
         return (self.x, self.y)
-
 
 
 def in_control(arr: np.ndarray) -> np.ndarray:
