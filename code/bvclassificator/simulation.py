@@ -75,15 +75,39 @@ class Profile:
         return (self.x, self.y)
 
 
+
+
+def conductivity(temp:float) -> float:
+    """Conductivity for 17-4 PH. The conductivity depends on material state.
+
+    Args:
+        temp (float): Temperature of the previous layer
+
+    Returns:
+        float: Conductivity of the material.
+    """
+    if temp < 1404:
+        return 10.9385 + 0.01461*temp
+    else:
+        return 31.4
+    
+
+
+
+
+
+
+
 def in_control(arr: np.ndarray) -> np.ndarray:
-    return 0.5*arr**2+3
+    P = 220    # Heat power W
+    v = 755.5  # Scan speed mm/s
+    T0 = 25    # Room temperature °C
+    alpha = 0.52
+    
 
 
 if __name__ == "__main__":
-    c1 = Profile(0, 2, 100, 60.43)
+    c1 = Profile(0, 2, 600, 1)
     c1.simulate({"label": 0,
-                 "function": in_control}, 0, 15, with_noise=True)
+                 "function": in_control}, 0, 0.001, with_noise=True)
     c1.plot()
-    print(c1.label)
-    print(c1.index)
-    print(c1.coordinates)

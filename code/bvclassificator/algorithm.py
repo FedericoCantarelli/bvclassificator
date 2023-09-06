@@ -284,23 +284,25 @@ if __name__ == "__main__":
     grid = Lattice(dimension=dimension,
                    time_period=60,
                    n_frames=60)
+    
+    print(grid.grid_points)
+    
 
-    # Create structure
-    profile_list = []
-    for y in y_range:
-        for x in x_range:
-            c = simulation.Profile(x, y, n_frames=60, time_period=60)
-            c.simulate(sim_params={"label": 1,
-                                   "function": cos},
-                       loc=0,
-                       scale=1,
-                       with_noise=False)
-            profile_list.append(c)
-            i += 1
 
-    grid.build(profile_list=profile_list)
+    # # Create structure
+    # profile_list = []
+    # for y in y_range:
+    #     for x in x_range:
+    #         c = simulation.Profile(x, y, n_frames=60, time_period=60)
+    #         c.simulate(sim_params={"label": 1,
+    #                                "function": cos},
+    #                    loc=0,
+    #                    scale=1,
+    #                    with_noise=False)
+    #         profile_list.append(c)
+    #         i += 1
 
-    cluster_now(lattice=grid,
-                n=3,
-                k=5,
-                p=10)
+    # grid.build(profile_list=profile_list)
+
+    
+    
