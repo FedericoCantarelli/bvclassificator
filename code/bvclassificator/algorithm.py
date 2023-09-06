@@ -20,10 +20,16 @@ def build_structure(profile_list):
 
 
 def random_nuclei(n: int):
-    x_coord = np.random.randint(low=0, high=DIMENSION, size=n)
-    y_coord = np.random.randint(low=0, high=DIMENSION, size=n)
+    nuclei = []
 
-    return np.array([(i, j) for i, j in zip(x_coord, y_coord)])
+    while len(nuclei) < n:
+        x_coord = np.random.randint(low = 0, high = DIMENSION)
+        y_coord = np.random.randint(low = 0, high = DIMENSION)
+
+        if (x_coord, y_coord) not in nuclei:
+            nuclei.append((x_coord, y_coord))
+
+    return np.array(nuclei)
 
 
 def cos(arr):
@@ -81,24 +87,25 @@ def nuclei_mapping(grid_points: np.ndarray, nuclei: np.ndarray):
 
 
 if __name__ == "__main__":
-    # grid = init_grid()
-    # nuclei = random_nuclei(3)
-    # mapping = nuclei_mapping(grid, nuclei)
+    grid = init_grid()
+    nuclei = random_nuclei(3)
+    mapping = nuclei_mapping(grid, nuclei)
+    print(nuclei)
+    print(mapping)
 
     # Create structure
-    # profile_list = []
-    # for y in y_range:
-    #     for x in x_range:
-    #         c = simulation.Profile(x, y, n_frames=60, time_period=60)
-    #         c.simulate(sim_params={"in_control":True,
-    #                                "function":cos},
-    #                                loc=0,
-    #                                scale=1,
-    #                                with_noise=False)
-    #         profile_list.append(c)
-    #         i += 1
+    profile_list = []
+    for y in y_range:
+        for x in x_range:
+            c = simulation.Profile(x, y, n_frames=60, time_period=60)
+            c.simulate(sim_params={"in_control":True,
+                                   "function":cos},
+                                   loc=0,
+                                   scale=1,
+                                   with_noise=False)
+            profile_list.append(c)
+            i += 1
 
-    # s = build_structure(profile_list)
+    s = build_structure(profile_list)
 
-    # print(s[1,:,:])
-    pass
+
