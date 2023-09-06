@@ -309,7 +309,7 @@ class Structure:
                 bivariate_gaussian = multivariate_normal(
                     mean=means, cov=cov_matrix)
 
-                # Keeo track of profile
+                # Keep track of profile
                 temp_list = []
 
                 # Keep track of weights
@@ -327,7 +327,8 @@ class Structure:
                 # Compute final dictionary
                 avg_dictionary[j] = np.sum(
                     temp_array, axis=0)/sum(weights_list)
-
+                
+            
             # Create a FData object
             fda_matrix = np.zeros(
                 (len(avg_dictionary.keys()), self.time * self.fps))

@@ -6,11 +6,11 @@ DIMENSION = 3
 
 
 class Profile:
-    def __init__(self, x: int, y: int, n_frames: int, time_period: int) -> None:
+    def __init__(self, x: int, y: int, n_frames: int, time_period: float) -> None:
         self.x = x
         self.y = y
         self.time_frames = np.linspace(0, time_period, n_frames)
-        self.in_control = None
+        self.label = None
         self.profile = None
         self.errors = None
         self.func_profile = None
@@ -20,11 +20,11 @@ class Profile:
         """_summary_
 
         Args:
-            sim_params (dict): A dictionary containing a boolean "variable in_control" and a "funciton" simulation function
+            sim_params (dict): A dictionary containing a int variable "label" and a "funciton" simulation function
             loc (float): Mean of error normal distribution
             scale (float): Standard deviation of error normal distribution
         """
-        self.in_control = sim_params["in_control"]
+        self.label = sim_params["label"]
         self.func_profile = sim_params["function"](self.time_frames)
 
         if with_noise:
@@ -80,9 +80,10 @@ def in_control(arr: np.ndarray) -> np.ndarray:
 
 
 if __name__ == "__main__":
-    c1 = Profile(0, 2, 100, 60)
-    c1.simulate({"in_control": True,
-                 "function": in_control}, 0, 15)
+    c1 = Profile(0, 2, 100, 60.43)
+    c1.simulate({"label": 0,
+                 "function": in_control}, 0, 15, with_noise=True)
     c1.plot()
+    print(c1.label)
     print(c1.index)
     print(c1.coordinates)
