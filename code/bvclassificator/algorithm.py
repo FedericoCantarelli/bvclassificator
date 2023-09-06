@@ -39,6 +39,10 @@ class Lattice:
         self.dimension = dimension
         self.k = None
 
+    @property
+    def average_normalized_entropy(self):
+        return np.sum(self.spatial_entropy)/(np.log(self.k)*(self.dimension * self.dimension))
+
     def build(self, profile_list: list):
         for p in profile_list:
             self.structure[:, p.y, p.x] = p.profile
@@ -70,7 +74,9 @@ class Lattice:
             for j in range(self.dimension):
                 arr = self.percentage[:, i, j] + 1e-15  #  For log
                 self.spatial_entropy[i,
-                                     j] = round(-np.sum(arr * np.log(arr)), 5)
+                                     j] = np.round(-np.sum(arr * np.log(arr)), 5)
+        
+        self.normalized_spatial_entropy = np.round(self.spatial_entropy/np.log(self.k),4)
 
 
 def _mapping_dict(ub: np.ndarray, ua: np.ndarray, l: np.ndarray) -> dict:
