@@ -6,6 +6,30 @@ from sklearn.cluster import KMeans
 from sklearn.metrics.cluster import contingency_matrix
 from sklearn.cluster import KMeans
 
+import matplotlib.pyplot as plt
+
+import skfda
+from skfda.misc.hat_matrix import (
+    KNeighborsHatMatrix,
+    LocalLinearRegressionHatMatrix,
+    NadarayaWatsonHatMatrix,
+)
+from skfda.misc.kernels import uniform
+from skfda.preprocessing.smoothing import KernelSmoother
+from skfda.preprocessing.smoothing.validation import SmoothingParameterSearch
+
+
+from skfda.exploratory.visualization import FPCAPlot
+from skfda.preprocessing.dim_reduction import FPCA
+from skfda.representation.basis import (
+    BSplineBasis,
+    FourierBasis,
+    MonomialBasis,
+)
+
+
+
+
 DIMENSION = 2
 
 
@@ -37,6 +61,9 @@ class Lattice:
                                                           dimension))
 
         self.dimension = dimension
+
+        self.time_frames = np.linspace(0, time_period, n_frames)
+        
         self.k = None
 
     @property
@@ -206,7 +233,7 @@ def group(nuclei: np.ndarray, mapping: np.ndarray, grid_points: np.ndarray, s: n
     Returns:
         dict: Return a dictionary in the form {int label of the nucleus, np.ndarray of the weighted average}
     """
-    d = dict()
+    d = np.zeros(shape=(nuclei.shape[0], s.shape[0]))
     max_dist, min_dist = max_min_distance(nuclei)
 
     # Find sigma <- CONTROLLARE SE È STD O VAR
@@ -227,7 +254,7 @@ def group(nuclei: np.ndarray, mapping: np.ndarray, grid_points: np.ndarray, s: n
         for i, w in enumerate(weights):
             selected_profiles[:, i] = selected_profiles[:, i]*w
 
-        d[n] = np.sum(selected_profiles, axis=1)/np.sum(weights)
+        d[n, :] = np.sum(selected_profiles, axis=1)/np.sum(weights)
 
     return d
 
@@ -269,6 +296,16 @@ def kmeans_clustering(matrix: np.ndarray, k: int) -> np.ndarray:
     return kmeans.labels_
 
 
+
+def do_fda(arr: np.ndarray, frames:np.ndarray, bandwidth: float) -> None:
+    fd = skfda.FDataGrid(
+        data_matrix=arr,
+        grid_points=frames,
+        )
+    
+
+
+
 def cluster_now(lattice, n: int, k: int, p: int):
     lattice.k = k
 
@@ -280,16 +317,22 @@ def cluster_now(lattice, n: int, k: int, p: int):
     nuclei_map = nuclei_mapping(grid_points=lattice.grid_points,
                                 nuclei=nuclei)
 
-    print("nuclei_map")
-    print(nuclei_map)
-
     # Compute representative
     rep_functions = group(nuclei=nuclei,
                           mapping=nuclei_map,
                           grid_points=lattice.grid_points,
                           s=lattice.structure)
+    
+    do_fda(rep_functions, lattice.time_frames)
 
-    print(rep_functions)
+    
+    
+
+
+
+
+
+
 
 
 if __name__ == "__main__":
