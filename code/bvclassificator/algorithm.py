@@ -5,6 +5,8 @@ from scipy.stats import multivariate_normal
 from sklearn.cluster import KMeans
 from sklearn.metrics.cluster import contingency_matrix
 from sklearn.cluster import KMeans
+import random
+
 
 import matplotlib.pyplot as plt
 
@@ -28,6 +30,10 @@ from skfda.representation.basis import (
 )
 
 
+#  Concurrency programming and code performances evaluation
+import time
+import concurrent.futures
+from itertools import repeat
 
 
 DIMENSION = 2
@@ -63,7 +69,7 @@ class Lattice:
         self.dimension = dimension
 
         self.time_frames = np.linspace(0, time_period, n_frames)
-        
+
         self.k = None
 
     @property
@@ -129,7 +135,7 @@ def _cluster_mapping(array: np.ndarray, baseline: np.ndarray) -> np.ndarray:
     return new_label
 
 
-def random_nuclei(n: int, dim: int) -> np.ndarray:
+def random_nuclei(args: tuple) -> np.ndarray:
     """Fuction to select n random nuclei for the Voronoi tesselation.
 
     Args:
@@ -139,11 +145,13 @@ def random_nuclei(n: int, dim: int) -> np.ndarray:
     Returns:
         np.ndarray: Array with n random nuclei
     """
+    n = args[0]
+    dim = args[1]
     assert n <= dim**2, "Error: selected nuclei must be less or equal to available points number."
     nuclei = []
     while len(nuclei) < n:
-        x_coord = np.random.randint(low=0, high=dim)
-        y_coord = np.random.randint(low=0, high=dim)
+        x_coord = random.randint(0, dim)
+        y_coord = random.randint(0, dim)
         if (x_coord, y_coord) not in nuclei:
             nuclei.append((x_coord, y_coord))
     return np.array(nuclei)
@@ -296,14 +304,11 @@ def kmeans_clustering(matrix: np.ndarray, k: int) -> np.ndarray:
     return kmeans.labels_
 
 
-
-def do_fda(arr: np.ndarray, frames:np.ndarray, bandwidth: float) -> None:
+def do_fda(arr: np.ndarray, frames: np.ndarray, bandwidth: float) -> None:
     fd = skfda.FDataGrid(
         data_matrix=arr,
         grid_points=frames,
-        )
-    
-
+    )
 
 
 def cluster_now(lattice, n: int, k: int, p: int):
@@ -322,40 +327,60 @@ def cluster_now(lattice, n: int, k: int, p: int):
                           mapping=nuclei_map,
                           grid_points=lattice.grid_points,
                           s=lattice.structure)
-    
+
     do_fda(rep_functions, lattice.time_frames)
-
-    
-    
-
-
-
-
-
-
 
 
 if __name__ == "__main__":
-    x_range = np.arange(0, DIMENSION)
-    y_range = np.arange(0, DIMENSION)
-    grid = Lattice(dimension=DIMENSION,
-                   time_period=60,
-                   n_frames=60)
+    start = time.perf_counter()
+    #########
+    # VARIE #
+    #########
+    # x_range = np.arange(0, DIMENSION)
+    # y_range = np.arange(0, DIMENSION)
+    # grid = Lattice(dimension=DIMENSION,
+    #                time_period=60,
+    #                n_frames=60)
 
-    # Create structure
-    profile_list = []
-    for y in y_range:
-        for x in x_range:
-            c = simulation.Profile(x, y, n_frames=60, time_period=60)
-            c.simulate(loc=0,
-                       scale=1,
-                       with_noise=True,
-                       label=1,
-                       tau=5)
-            profile_list.append(c)
+    # # Create structure
+    # profile_list = []
+    # for y in y_range:
+    #     for x in x_range:
+    #         c = simulation.Profile(x, y, n_frames=60, time_period=60)
+    #         c.simulate(loc=0,
+    #                    scale=1,
+    #                    with_noise=True,
+    #                    label=1,
+    #                    tau=5)
+    #         profile_list.append(c)
 
-    grid.build(profile_list=profile_list)
-    cluster_now(lattice=grid,
-                n=2,
-                k=3,
-                p=2)
+    # grid.build(profile_list=profile_list)
+    # cluster_now(lattice=grid,
+    #             n=2,
+    #             k=3,
+    #             p=2)
+
+    ##############
+    # Concurrent #
+    ##############
+
+    # with concurrent.futures.ProcessPoolExecutor() as executor:
+    #     results = executor.map(random_nuclei, [(10, 128) for _ in range(50)])
+    #     for result in results:
+    #         print(result)
+
+    ##############
+    # Sequential #
+    ##############
+    l = []
+    for _ in range(50):
+        a = random_nuclei((10, 128))
+        l.append(a)
+
+    print(l)
+
+    ###############
+    # Performance #
+    ###############
+    finish = time.perf_counter()
+    print(f"Secondi passati {finish-start}")
