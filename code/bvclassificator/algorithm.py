@@ -4,9 +4,9 @@ import math
 from scipy.stats import multivariate_normal
 from sklearn.cluster import KMeans
 from sklearn.metrics.cluster import contingency_matrix
+from sklearn.cluster import KMeans
 
-DIMENSION = 3
-i = 0
+DIMENSION = 2
 
 
 class Lattice:
@@ -75,8 +75,9 @@ class Lattice:
                 arr = self.percentage[:, i, j] + 1e-15  #  For log
                 self.spatial_entropy[i,
                                      j] = np.round(-np.sum(arr * np.log(arr)), 5)
-        
-        self.normalized_spatial_entropy = np.round(self.spatial_entropy/np.log(self.k),4)
+
+        self.normalized_spatial_entropy = np.round(
+            self.spatial_entropy/np.log(self.k), 4)
 
 
 def _mapping_dict(ub: np.ndarray, ua: np.ndarray, l: np.ndarray) -> dict:
@@ -111,6 +112,7 @@ def random_nuclei(n: int, dim: int) -> np.ndarray:
     Returns:
         np.ndarray: Array with n random nuclei
     """
+    assert n <= dim**2, "Error: selected nuclei must be less or equal to available points number."
     nuclei = []
     while len(nuclei) < n:
         x_coord = np.random.randint(low=0, high=dim)
@@ -118,10 +120,6 @@ def random_nuclei(n: int, dim: int) -> np.ndarray:
         if (x_coord, y_coord) not in nuclei:
             nuclei.append((x_coord, y_coord))
     return np.array(nuclei)
-
-
-def cos(arr):
-    return np.array([i for _ in range(arr.shape[0])])
 
 
 def euclidean_distance(point1: np.ndarray, point2: np.ndarray) -> float:
@@ -182,17 +180,18 @@ def nuclei_mapping(grid_points: np.ndarray, nuclei: np.ndarray) -> np.ndarray:
     Returns:
         np.ndarray: An array containing the index of the respective nucleus in the list
     """
-    mapping = []
+    assignments = []
+
     for grid_point in grid_points:
         min_distance = float('inf')
-        user_point = None
+        nearest_user_point = None
         for i, user_point in enumerate(nuclei):
             distance = np.linalg.norm(grid_point - user_point)
             if distance < min_distance:
                 min_distance = distance
-                user_point = i
-        mapping.append(user_point)
-    return np.array(mapping)
+                nearest_user_point = i
+        assignments.append(nearest_user_point)
+    return np.array(assignments)
 
 
 def group(nuclei: np.ndarray, mapping: np.ndarray, grid_points: np.ndarray, s: np.ndarray) -> dict:
@@ -254,6 +253,22 @@ def compute_gaussian_weight(loc: np.ndarray, covmatrix: np.ndarray, selected_poi
     return np.array(w)
 
 
+def kmeans_clustering(matrix: np.ndarray, k: int) -> np.ndarray:
+    """Function that perform kmeans clustering and return the labels of the cluster. 
+    Take as argument a bidimensional numpy array in the form [[p11,p12,p13], [p21,p22,p23], [p31,p32,p33], ... [pn1,pn2,pn3],]
+
+
+    Args:
+        matrix (np.ndarray): A matrix with the observations to be clustered
+        k (int): Number of cluster
+
+    Returns:
+        np.ndarray: ordered cluster label
+    """
+    kmeans = KMeans(n_clusters=k).fit(matrix)
+    return kmeans.labels_
+
+
 def cluster_now(lattice, n: int, k: int, p: int):
     lattice.k = k
 
@@ -265,8 +280,8 @@ def cluster_now(lattice, n: int, k: int, p: int):
     nuclei_map = nuclei_mapping(grid_points=lattice.grid_points,
                                 nuclei=nuclei)
 
-    nuclei = np.array([(0, 0), (2, 1)])
-    nuclei_map = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1])
+    print("nuclei_map")
+    print(nuclei_map)
 
     # Compute representative
     rep_functions = group(nuclei=nuclei,
@@ -278,31 +293,26 @@ def cluster_now(lattice, n: int, k: int, p: int):
 
 
 if __name__ == "__main__":
-    dimension = 3
-    x_range = np.arange(0, dimension)
-    y_range = np.arange(0, dimension)
-    grid = Lattice(dimension=dimension,
+    x_range = np.arange(0, DIMENSION)
+    y_range = np.arange(0, DIMENSION)
+    grid = Lattice(dimension=DIMENSION,
                    time_period=60,
                    n_frames=60)
-    
-    print(grid.grid_points)
-    
 
+    # Create structure
+    profile_list = []
+    for y in y_range:
+        for x in x_range:
+            c = simulation.Profile(x, y, n_frames=60, time_period=60)
+            c.simulate(loc=0,
+                       scale=1,
+                       with_noise=True,
+                       label=1,
+                       tau=5)
+            profile_list.append(c)
 
-    # # Create structure
-    # profile_list = []
-    # for y in y_range:
-    #     for x in x_range:
-    #         c = simulation.Profile(x, y, n_frames=60, time_period=60)
-    #         c.simulate(sim_params={"label": 1,
-    #                                "function": cos},
-    #                    loc=0,
-    #                    scale=1,
-    #                    with_noise=False)
-    #         profile_list.append(c)
-    #         i += 1
-
-    # grid.build(profile_list=profile_list)
-
-    
-    
+    grid.build(profile_list=profile_list)
+    cluster_now(lattice=grid,
+                n=2,
+                k=3,
+                p=2)
