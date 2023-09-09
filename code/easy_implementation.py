@@ -1,14 +1,13 @@
 import numpy as np
-import simulation
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 import math
+
 from scipy.stats import multivariate_normal
 from sklearn.cluster import KMeans
 from sklearn.metrics.cluster import contingency_matrix
 from sklearn.cluster import KMeans
 import random
-
-
-import matplotlib.pyplot as plt
 
 import skfda
 from skfda.misc.hat_matrix import (
@@ -30,17 +29,94 @@ from skfda.representation.basis import (
 )
 
 
-#  Concurrency programming and code performances evaluation
-import time
-import concurrent.futures
-from itertools import repeat
+# Global parameters
+DIMENSION = 3  #  Dimension of the grid
 
 
-DIMENSION = 2
+class Profile:
+    def __init__(self, x: int, y: int, n_frames: int) -> None:
+        self.x = x
+        self.y = y
+        self.time_frames = np.arange(0, n_frames)
+        self.label = None
+        self.profile = None
+        self.errors = None
+        self.func_profile = None
+        self.err_params = None
+
+    def simulate(self, loc: float, scale: float, with_noise: bool, label: int, in_control: bool) -> None:
+        """_summary_
+
+        Args:
+            sim_params (dict): A dictionary containing a int variable "label" and a "funciton" simulation function
+            loc (float): Mean of error normal distribution
+            scale (float): Standard deviation of error normal distribution
+        """
+        self.label = label
+        if in_control:
+            self.func_profile = linear(self.time_frames)
+
+        else:
+            self.func_profile = quadratic(self.time_frames)
+
+        if with_noise:
+            self.errors = np.random.normal(
+                loc, scale, self.time_frames.shape[0])
+            self.profile = self.func_profile + self.errors
+            self.err_params = (loc, scale)
+
+        else:
+            self.profile = self.func_profile
+
+    def plot(self) -> None:
+        gs1 = gridspec.GridSpec(2, 6)
+        ax1 = plt.subplot(gs1[0, :-2])
+        ax2 = plt.subplot(gs1[1, :-2])
+        ax3 = plt.subplot(gs1[0, -2:])
+        ax4 = plt.subplot(gs1[1, -2:])
+
+        ax1.plot(self.time_frames, self.profile, marker="D",
+                 markerfacecolor="white", markersize=4, markeredgewidth=1)
+        ax1.set_xticks([])
+        ax1.set_title("Temperature Profile")
+
+        ax2.scatter(self.time_frames, self.errors, s=12)
+        ax2.axhline(y=self.err_params[0], color="orange",
+                    linestyle="--", linewidth=1)
+        ax2.set_title(
+            f"Errors from a N({self.err_params[0]},{self.err_params[1]})")
+        ax3.plot(self.func_profile)
+        ax3.set_xticks([])
+        ax3.yaxis.tick_right()
+        ax3.set_title("Profile Function")
+
+        ax4.hist(self.errors, "auto", edgecolor="black",
+                 alpha=0.8, orientation="horizontal", density=True)
+        ax4.set_title("Error Distribution")
+        ax4.set_yticks([])
+
+        plt.tight_layout()
+        plt.show()
+
+    @property
+    def index(self) -> int:
+        return self.y + self.x * DIMENSION
+
+    @property
+    def coordinates(self) -> tuple:
+        return (self.x, self.y)
+
+
+def linear(arr: np.ndarray):
+    return arr
+
+
+def quadratic(arr: np.ndarray):
+    return np.power(arr, 2)
 
 
 class Lattice:
-    def __init__(self, dimension: int, time_period: float, n_frames: int) -> None:
+    def __init__(self, dimension: int, n_frames: int, b: int, k) -> None:
         x_range = np.arange(0, dimension)
         y_range = np.arange(0, dimension)
         self.grid_points = np.array([(x, y) for x in x_range for y in y_range])
@@ -51,10 +127,12 @@ class Lattice:
                    dimension,
                    dimension))
 
-        self.labels = np.zeros(shape=(dimension,
+        self.labels = np.zeros(shape=(b,
+                                      dimension,
                                       dimension))
 
-        self.percentage = np.zeros(shape=(dimension,
+        self.percentage = np.zeros(shape=(k,
+                                          dimension,
                                           dimension))
 
         self.final_label = np.zeros(shape=(dimension,
@@ -68,9 +146,10 @@ class Lattice:
 
         self.dimension = dimension
 
-        self.time_frames = np.linspace(0, time_period, n_frames)
+        self.time_frames = np.arange(0, n_frames)
 
-        self.k = None
+        self.k = k
+        self.b = b
 
     @property
     def average_normalized_entropy(self):
@@ -150,8 +229,8 @@ def random_nuclei(args: tuple) -> np.ndarray:
     assert n <= dim**2, "Error: selected nuclei must be less or equal to available points number."
     nuclei = []
     while len(nuclei) < n:
-        x_coord = random.randint(0, dim)
-        y_coord = random.randint(0, dim)
+        x_coord = random.randint(0, dim-1)
+        y_coord = random.randint(0, dim-1)
         if (x_coord, y_coord) not in nuclei:
             nuclei.append((x_coord, y_coord))
     return np.array(nuclei)
@@ -300,88 +379,93 @@ def kmeans_clustering(matrix: np.ndarray, k: int) -> np.ndarray:
     Returns:
         np.ndarray: ordered cluster label
     """
-    kmeans = KMeans(n_clusters=k).fit(matrix)
+    kmeans = KMeans(n_clusters=k, n_init="auto").fit(matrix)
     return kmeans.labels_
 
 
-def do_fda(arr: np.ndarray, frames: np.ndarray, bandwidth: float) -> None:
+def do_fda(arr: np.ndarray, frames: np.ndarray) -> None:
     fd = skfda.FDataGrid(
         data_matrix=arr,
         grid_points=frames,
     )
-
+    fpca = FPCA(n_components=2)
+    fd_score = fpca.fit_transform(fd)
+    return fd_score
 
 
 def cluster_now(lattice, n: int, k: int, p: int):
     lattice.k = k
 
-    # Select n random nuclei from the lattice
-    nuclei = random_nuclei(n=n,
-                           dim=lattice.dimension)
+    for i in range(lattice.b):
+        # Select n random nuclei from the lattice
+        nuclei = random_nuclei((n, lattice.dimension))
+        # print(f"Nuclei are: {nuclei}")
 
-    # Mapping each gridpoint to nearest nucleus
-    nuclei_map = nuclei_mapping(grid_points=lattice.grid_points,
-                                nuclei=nuclei)
+        # Mapping each gridpoint to nearest nucleus
+        nuclei_map = nuclei_mapping(grid_points=lattice.grid_points,
+                                    nuclei=nuclei)
 
-    # Compute representative
-    rep_functions = group(nuclei=nuclei,
-                          mapping=nuclei_map,
-                          grid_points=lattice.grid_points,
-                          s=lattice.structure)
+        # print(f"Mapping is: {nuclei_map}")
 
-    do_fda(rep_functions, lattice.time_frames)
+        # Compute representative
+        rep_functions = group(nuclei=nuclei,
+                              mapping=nuclei_map,
+                              grid_points=lattice.grid_points,
+                              s=lattice.structure)
+
+        # Compute scores of FPCA
+        scores = do_fda(rep_functions, lattice.time_frames)
+
+        # Cluster the score
+        cluster_label = kmeans_clustering(scores, 2)
+        # print(f"Nuclei labels: {cluster_label}")
+
+        #  Remap the cluster to original observation
+        unfold = unfold_clusters(cluster_label, nuclei_map)
+        # print(f"Unfolded labels: {unfold}")
+        print(f"Reshaped labels: {unfold.reshape(DIMENSION, DIMENSION)}")
+
+        lattice.labels[i, :, :] = unfold.reshape(DIMENSION, DIMENSION)
+
+
+def unfold_clusters(labels: list, mapping: np.ndarray) -> np.ndarray:
+    result = np.zeros_like(mapping)
+    for i, e in enumerate(mapping):
+        result[i] = labels[e]
+
+    return result
 
 
 if __name__ == "__main__":
-    start = time.perf_counter()
-    #########
-    # VARIE #
-    #########
-    # x_range = np.arange(0, DIMENSION)
-    # y_range = np.arange(0, DIMENSION)
-    # grid = Lattice(dimension=DIMENSION,
-    #                time_period=60,
-    #                n_frames=60)
+    grid = Lattice(DIMENSION, 60, 5, 5)
 
-    # # Create structure
-    # profile_list = []
-    # for y in y_range:
-    #     for x in x_range:
-    #         c = simulation.Profile(x, y, n_frames=60, time_period=60)
-    #         c.simulate(loc=0,
-    #                    scale=1,
-    #                    with_noise=True,
-    #                    label=1,
-    #                    tau=5)
-    #         profile_list.append(c)
+    profile_list = []
+    for i in range(DIMENSION):
+        for j in range(DIMENSION):
+            c = Profile(i, j, 60)
+            if c.index in [0, 1, 3, 4]:
+                c.simulate(0, 1, False, 1, in_control=False)
+            else:
+                c.simulate(0, 1, False, 0, in_control=True)
+            # print(f"(x,y) = {(i,j)}")
+            # print(f"Index = {c.index}")
 
-    # grid.build(profile_list=profile_list)
-    # cluster_now(lattice=grid,
-    #             n=2,
-    #             k=3,
-    #             p=2)
+            profile_list.append(c)
 
-    ##############
-    # Concurrent #
-    ##############
+    grid.build(profile_list=profile_list)
+    print(f"Grid points is {grid.grid_points}")
 
-    # with concurrent.futures.ProcessPoolExecutor() as executor:
-    #     results = executor.map(random_nuclei, [(10, 128) for _ in range(50)])
-    #     for result in results:
-    #         print(result)
+    cluster_now(grid, 4, 2, 1)
+    # print("Before cluster matching")
+    # print(grid.labels, end = "\n\n")
+    grid.do_cluster_matching()
 
-    ##############
-    # Sequential #
-    ##############
-    l = []
-    for _ in range(50):
-        a = random_nuclei((10, 128))
-        l.append(a)
+    print("After cluster matching")
+    print(grid.labels)
 
-    print(l)
+    grid.find_final_label()
+    print("Percentages")
+    print(grid.percentage)
 
-    ###############
-    # Performance #
-    ###############
-    finish = time.perf_counter()
-    print(f"Secondi passati {finish-start}")
+    print("Final Label")
+    print(grid.final_label)

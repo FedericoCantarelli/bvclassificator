@@ -9,31 +9,6 @@ DIMENSION = 128  #  Dimension of the grid
 STRIDE = 21  # Stride of the laser
 
 
-def laser_position():
-    k = 1
-    l = []
-    v_dir = []
-    for i in range(DIMENSION):
-        temp = []
-        for j in range(DIMENSION):
-            temp.append((i, j))
-
-        if k % 2 == 1:
-            for t in temp:
-                l.append(t)
-
-        else:
-            for t in temp[::-1]:
-                l.append(t)
-
-        k += 1
-    return np.array([e for e in l[::STRIDE]])
-
-
-#  Create global array for the laser position
-position = laser_position()
-
-
 class Profile:
     def __init__(self, x: int, y: int, n_frames: int, time_period: float) -> None:
         self.x = x
@@ -101,104 +76,6 @@ class Profile:
     @property
     def coordinates(self) -> tuple:
         return (self.x, self.y)
-
-
-# def capacity(temp: float) -> float:
-#     """Capacity for 17-4 PH. Heat capacity depends on material state.
-
-#     Args:
-#         temp (float): Temperature of the point
-
-#     Returns:
-#         float: Conductivity of the material.
-#     """
-#     if temp < 1404:
-#         return 406.3 + 0.3055*temp
-#     else:
-#         return 834
-
-
-# def conductivity(temp: float) -> float:
-#     """Conductivity for 17-4 PH. The conductivity depends on material state.
-
-#     Args:
-#         temp (float): Temperature of the point
-
-#     Returns:
-#         float: Conductivity of the material.
-#     """
-#     if temp < 1404:
-#         return 10.9385 + 0.01461*temp
-#     else:
-#         return 31.4
-
-
-# def density(temp: float) -> float:
-#     """Density for 17-4 PH. The density depends on material state.
-
-#     Args:
-#         temp (float): Temperature of the point
-
-#     Returns:
-#         float: Density of the material.
-#     """
-#     if temp < 1404:
-#         return 7226.76
-#     else:
-#         return 7805.08 + 0.412*temp
-
-
-# def compute_thermal_diffusion(temp: float) -> float:
-#     cond = conductivity(temp)
-#     cap = capacity(temp)
-#     dens = density(temp)
-
-#     return cond/(cap*dens)
-
-
-# def in_control(arr: np.ndarray, x: int, y: int) -> np.ndarray:
-
-#     result = np.zeros_like(arr)
-
-#     P = 220         # Heat power W
-#     v = 755.5       # Scan speed mm/s
-#     T0 = 25         # Room temperature °C
-#     alpha = 0.52    # Adjust the shape of the melting pool
-#     z = 0           # Distance of the interested point from heat source.
-
-#     for i, e in enumerate(arr):
-#         r = math.sqrt((position[i][0] - x)**2 + (position[i][1]-y)**2)
-#         azimuth = compute_azimuth(position[i], (x, y))
-
-#         if i == 0:
-#             k = compute_thermal_diffusion(T0)
-#             cond = conductivity(T0)
-
-#         else:
-#             k = compute_thermal_diffusion(result[i-1])
-#             cond  = conductivity(result[i-1])
-
-#         coef = (alpha * P)/(2*math.pi*cond*math.sqrt(r**2+(alpha*z)**2))
-#         exponent = -v * (math.sqrt(r**2+(alpha*z) **
-#                          2+r*math.cos(azimuth)))/(2*k)
-#         exp_res = math.exp(exponent)
-
-#         result[i] = coef*exp_res+T0
-
-#     return result
-
-
-# def compute_azimuth(start_point, end_point):
-#     x1, y1 = start_point
-#     x2, y2 = end_point
-
-#     # Calcola la differenza tra le coordinate x e y
-#     delta_x = x2 - x1
-#     delta_y = y2 - y1
-
-#     # Calcola l'azimuth in radianti
-#     azimuth_rad = math.atan2(delta_y, delta_x)
-#     return azimuth_rad
 
 
 def sim(arr: np.ndarray, tau):
