@@ -1,14 +1,12 @@
 import numpy as np
-# from simulation import Profile
 import math
 from scipy.stats import multivariate_normal
 from sklearn.cluster import KMeans
 from sklearn.metrics.cluster import contingency_matrix
-from sklearn.cluster import KMeans
 import random
-
-
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+
 
 import skfda
 from skfda.misc.hat_matrix import (
@@ -35,29 +33,30 @@ import time
 import concurrent.futures
 from itertools import repeat
 
-DIMENSION = 3
+# DIMENSION = 3
+
 
 class Lattice:
-    def __init__(self, dimension:int, time_period: float, fps:int, b: int, k:int) -> None:
-        
-        # Dimension of the lattice
+    def __init__(self, dimension: int, time_period: float, fps: int, b: int, k: int) -> None:
+
+        #  Dimension of the lattice
         self.dimension = dimension
-        
+
         # Grid points in the lattice in the form (x, y)
-        self.grid_points = np.array([(x, y) for x in np.arange(0, self.dimension) for y in np.arange(0, self.dimension)])
-        
+        self.grid_points = np.array([(x, y) for x in np.arange(
+            0, self.dimension) for y in np.arange(0, self.dimension)])
+
         # Matrix to store gorund truth labels of profiles
         self.label_matrix = np.zeros(shape=(dimension,
                                             dimension))
-        
-        # Number of frames
-        self.n_frames = time_period*fps
-        
+
+        # Compute time frames
+        self.time_frames = np.linspace(0, time_period-1, fps*time_period)
+
         self.structure = np.zeros(
-            shape=(self.time_frames,
+            shape=(self.time_frames.shape[0],
                    dimension,
                    dimension))
-        
 
         self.final_label = np.zeros(shape=(dimension,
                                            dimension))
@@ -67,26 +66,19 @@ class Lattice:
 
         self.normalized_spatial_entropy = np.zeros(shape=(dimension,
                                                           dimension))
-        
 
-
-
-
-
-        
+        #  Attributes initialized by calling init_algo()
+        self.n = None
         self.k = None
+        self.p = None
         self.b = None
         self.labels = None
         self.percentage = None
 
-        
+        # Attribute to verify that clustering has been done
+        self.clustered = False
 
-        
-
-
-
-
-    def init_algo(self, n: int, k:int, p: int, b: int) -> None:
+    def init_algo(self, n: int, k: int, p: int, b: int) -> None:
         """Init algorithm parameters.
 
         Args:
@@ -105,11 +97,48 @@ class Lattice:
         self.percentage = np.zeros(shape=(k,
                                           self.dimension,
                                           self.dimension))
-
+        self.n = n
+        self.k = k
+        self.p = p
+        self.b = b
 
     @property
     def average_normalized_entropy(self):
-        return np.sum(self.spatial_entropy)/(np.log(self.k)*(self.dimension * self.dimension))
+        """Find average normalized entropy in order to assess results quality
+
+        Returns:
+            float: If available return entropy, otherwise raise an exception. 
+        """
+        if self.clustered:
+            return np.sum(self.spatial_entropy)/(np.log(self.k)*(self.dimension * self.dimension))
+        else:
+            raise Exception("Error: you must first perform clustering.")
+
+    @property
+    def classification_rate(self):
+        """Find classification rate.
+
+        Returns:
+            float: If available return classification rate, otherwise raise an exception. 
+        """
+        if self.clustered:
+            # ! Bisogna anche fare il cluster matching prima di fare il classification rate #
+            return np.sum(self.spatial_entropy)/(np.log(self.k)*(self.dimension * self.dimension))
+
+        else:
+            raise Exception("Error: you must first perform clustering.")
+
+    @property
+    def labels_(self) -> np.ndarray:
+        """Return final label as a matrix.
+
+        Returns:
+            np.ndarray: If available return final label matrix, otherwise raise an exception. 
+        """
+        if self.clustered:
+            return self.final_label
+        else:
+            raise Exception("Error: you must first perform clustering.")
 
     def build(self, profile_list: list):
         for p in profile_list:
@@ -130,7 +159,8 @@ class Lattice:
         baseline = self.labels[0, :, :]
         for i in range(self.labels.shape[0]):
             new_labels = _cluster_mapping(self.labels[i, :, :], baseline)
-            self.labels[i, :, :] = _change_label(self.labels[i, :, :], new_labels)
+            self.labels[i, :, :] = _change_label(
+                self.labels[i, :, :], new_labels)
 
     def find_entropy(self):
         for i in range(self.dimension):
@@ -141,6 +171,63 @@ class Lattice:
 
         self.normalized_spatial_entropy = np.round(
             self.spatial_entropy/np.log(self.k), 4)
+
+    def cluster_now(self):
+        self.clustered = True
+        for i in range(self.b):
+            # Select n random nuclei from the lattice
+            nuclei = _random_nuclei(self.n, self.dimension)
+            # print(f"Nuclei are: {nuclei}")
+
+            # Mapping each gridpoint to nearest nucleus
+            nuclei_map = _nuclei_mapping(grid_points=self.grid_points,
+                                         nuclei=nuclei)
+
+            # Compute representative
+            rep_functions = _group(nuclei=nuclei,
+                                   mapping=nuclei_map,
+                                   grid_points=self.grid_points,
+                                   structure=self.structure)
+
+            # Compute scores of FPCA
+            scores = _do_fda(arr=rep_functions,
+                             frames=self.time_frames,
+                             p=self.p)
+
+            # Cluster the score
+            cluster_label = _kmeans_clustering(scores, 2)
+
+            #  Remap the cluster to original observation
+            unfold = _unfold_clusters(cluster_label, nuclei_map)
+            self.labels[i, :, :] = unfold.reshape(
+                self.dimension, self.dimension)
+
+    def plot_results(self):
+        # gs1 = gridspec.GridSpec(2, 6)
+        pass
+        # matrix_entropy = df.pivot(index='y', columns='x',values='entropy').values
+        # matrix_cluster = df.pivot(index='y', columns='x', values='label').values
+
+        # fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2)
+        # cmap = plt.cm.get_cmap('Dark2', np.max(matrix_cluster) + 1)
+        # im = ax1.imshow(matrix_cluster, cmap=cmap)
+
+        # ax1.set_xticks([], labels=[])
+        # ax1.set_yticks([], labels=[])
+
+        # ax1.set_title("Clustering Result")
+
+        # im2 = ax2.imshow(matrix_entropy)
+
+        # ax2.set_xticks([], labels=[])
+        # ax2.set_yticks([], labels=[])
+
+        # cbar2 = ax2.figure.colorbar(im2, ax=ax2, fraction=0.046, pad=0.04)
+        # cbar2.remove()
+        # ax2.set_title("Spatial Entropy")
+
+        # fig.tight_layout()
+        # plt.show()
 
 
 def _change_label(arr: np.ndarray, new_label) -> np.ndarray:
@@ -156,7 +243,7 @@ def _cluster_mapping(array: np.ndarray, baseline: np.ndarray) -> np.ndarray:
     return new_label
 
 
-def random_nuclei(args: tuple) -> np.ndarray:
+def _random_nuclei(n: int, dim: int) -> np.ndarray:
     """Fuction to select n random nuclei for the Voronoi tesselation.
 
     Args:
@@ -166,8 +253,6 @@ def random_nuclei(args: tuple) -> np.ndarray:
     Returns:
         np.ndarray: Array with n random nuclei
     """
-    n = args[0]
-    dim = args[1]
     assert n <= dim**2, "Error: selected nuclei must be less or equal to available points number."
     nuclei = []
     while len(nuclei) < n:
@@ -178,7 +263,7 @@ def random_nuclei(args: tuple) -> np.ndarray:
     return np.array(nuclei)
 
 
-def euclidean_distance(point1: np.ndarray, point2: np.ndarray) -> float:
+def _euclidean_distance(point1: np.ndarray, point2: np.ndarray) -> float:
     """Compute euclidean distance between two points.
 
     Args:
@@ -193,7 +278,7 @@ def euclidean_distance(point1: np.ndarray, point2: np.ndarray) -> float:
     return math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
 
 
-def max_min_distance(coordinates: np.ndarray):
+def _max_min_distance(coordinates: np.ndarray):
     """
     Calcola la distanza euclidea massima e minima tra tutte le coordinate nella lista.
     """
@@ -203,21 +288,21 @@ def max_min_distance(coordinates: np.ndarray):
 
     for i in range(len(coordinates)):
         for j in range(i + 1, len(coordinates)):
-            distance = euclidean_distance(coordinates[i], coordinates[j])
+            distance = _euclidean_distance(coordinates[i], coordinates[j])
             max_dist = max(max_dist, distance)
             min_dist = min(min_dist, distance)
 
     return max_dist, min_dist
 
 
-def init_lattice():
-    x_range = np.arange(0, DIMENSION)
-    y_range = np.arange(0, DIMENSION)
-    grid_points = np.array([(x, y) for x in x_range for y in y_range])
-    return grid_points
+# def init_lattice():
+#     x_range = np.arange(0, DIMENSION)
+#     y_range = np.arange(0, DIMENSION)
+#     grid_points = np.array([(x, y) for x in x_range for y in y_range])
+#     return grid_points
 
 
-def indexing_coordinates_array(coordinates_list: list):
+def _indexing_coordinates_array(coordinates_list: list):
     ax_1 = []
     ax_0 = []
     for c in coordinates_list:
@@ -226,7 +311,7 @@ def indexing_coordinates_array(coordinates_list: list):
     return ax_0, ax_1
 
 
-def nuclei_mapping(grid_points: np.ndarray, nuclei: np.ndarray) -> np.ndarray:
+def _nuclei_mapping(grid_points: np.ndarray, nuclei: np.ndarray) -> np.ndarray:
     """Function to map each point of the lattice to the closest nucleus.
 
     Args:
@@ -250,22 +335,22 @@ def nuclei_mapping(grid_points: np.ndarray, nuclei: np.ndarray) -> np.ndarray:
     return np.array(assignments)
 
 
-def group(nuclei: np.ndarray, mapping: np.ndarray, grid_points: np.ndarray, s: np.ndarray) -> dict:
+def _group(nuclei: np.ndarray, mapping: np.ndarray, grid_points: np.ndarray, structure: np.ndarray) -> dict:
     """Function to compute weighted average representative for each nuclues and its relative neighborhood.
 
     Args:
         nuclei (np.ndarray): Array of nuclei coordinates
         mapping (np.ndarray): Mapping of each point in the grid to relative nuleus index
         grid_points (np.ndarray): Lattice grid_points
-        s (np.ndarray): Lattice structure
+        structure (np.ndarray): Lattice structure
 
     Returns:
         dict: Return a dictionary in the form {int label of the nucleus, np.ndarray of the weighted average}
     """
-    d = np.zeros(shape=(nuclei.shape[0], s.shape[0]))
-    max_dist, min_dist = max_min_distance(nuclei)
+    d = np.zeros(shape=(nuclei.shape[0], structure.shape[0]))
+    max_dist, min_dist = _max_min_distance(nuclei)
 
-    # Find sigma <- CONTROLLARE SE È STD O VAR
+    # ! Find sigma <- CONTROLLARE SE È STD O VAR
     sigma = max_dist/min_dist
 
     # Compute covariance matrix for bivariate normal distribution
@@ -273,22 +358,18 @@ def group(nuclei: np.ndarray, mapping: np.ndarray, grid_points: np.ndarray, s: n
 
     for n in range(np.max(mapping)+1):
         selected_points = grid_points[mapping == n]
-        ax_0, ax_1 = indexing_coordinates_array(selected_points)
-        weights = compute_gaussian_weight(loc=nuclei[n],
-                                          covmatrix=cov_matrix,
-                                          selected_points=selected_points)
-
-        selected_profiles = s[:, ax_1, ax_0]
-
+        ax_0, ax_1 = _indexing_coordinates_array(selected_points)
+        weights = _compute_gaussian_weight(loc=nuclei[n],
+                                           covmatrix=cov_matrix,
+                                           selected_points=selected_points)
+        selected_profiles = structure[:, ax_1, ax_0]
         for i, w in enumerate(weights):
             selected_profiles[:, i] = selected_profiles[:, i]*w
-
         d[n, :] = np.sum(selected_profiles, axis=1)/np.sum(weights)
-
     return d
 
 
-def compute_gaussian_weight(loc: np.ndarray, covmatrix: np.ndarray, selected_points: np.ndarray) -> np.ndarray:
+def _compute_gaussian_weight(loc: np.ndarray, covmatrix: np.ndarray, selected_points: np.ndarray) -> np.ndarray:
     """Function to compute gaussian weight for a given nucleo and a given array of selected coordinates.
 
     Args:
@@ -309,7 +390,7 @@ def compute_gaussian_weight(loc: np.ndarray, covmatrix: np.ndarray, selected_poi
     return np.array(w)
 
 
-def kmeans_clustering(matrix: np.ndarray, k: int) -> np.ndarray:
+def _kmeans_clustering(matrix: np.ndarray, k: int) -> np.ndarray:
     """Function that perform kmeans clustering and return the labels of the cluster. 
     Take as argument a bidimensional numpy array in the form [[p11,p12,p13], [p21,p22,p23], [p31,p32,p33], ... [pn1,pn2,pn3],]
 
@@ -325,52 +406,17 @@ def kmeans_clustering(matrix: np.ndarray, k: int) -> np.ndarray:
     return kmeans.labels_
 
 
-def do_fda(arr: np.ndarray, frames: np.ndarray) -> None:
+def _do_fda(arr: np.ndarray, frames: np.ndarray, p: int) -> np.ndarray:
     fd = skfda.FDataGrid(
         data_matrix=arr,
         grid_points=frames,
     )
-    fpca = FPCA(n_components=4)
+    fpca = FPCA(n_components=p)
     fd_score = fpca.fit_transform(fd)
     return fd_score
 
 
-def cluster_now(lattice, n: int, k: int, p: int):
-    lattice.k = k
-
-    for i in range(lattice.b):
-        # Select n random nuclei from the lattice
-        nuclei = random_nuclei((n, lattice.dimension))
-        # print(f"Nuclei are: {nuclei}")
-
-        # Mapping each gridpoint to nearest nucleus
-        nuclei_map = nuclei_mapping(grid_points=lattice.grid_points,
-                                    nuclei=nuclei)
-
-        # print(f"Mapping is: {nuclei_map}")
-
-        # Compute representative
-        rep_functions = group(nuclei=nuclei,
-                              mapping=nuclei_map,
-                              grid_points=lattice.grid_points,
-                              s=lattice.structure)
-
-        # Compute scores of FPCA
-        scores = do_fda(rep_functions, lattice.time_frames)
-
-        # Cluster the score
-        cluster_label = kmeans_clustering(scores, 2)
-        # print(f"Nuclei labels: {cluster_label}")
-
-        #  Remap the cluster to original observation
-        unfold = unfold_clusters(cluster_label, nuclei_map)
-        # print(f"Unfolded labels: {unfold}")
-        print(f"Reshaped labels:\n {unfold.reshape(DIMENSION, DIMENSION)}")
-
-        lattice.labels[i, :, :] = unfold.reshape(DIMENSION, DIMENSION)
-
-
-def unfold_clusters(labels: list, mapping: np.ndarray) -> np.ndarray:
+def _unfold_clusters(labels: list, mapping: np.ndarray) -> np.ndarray:
     result = np.zeros_like(mapping)
     for i, e in enumerate(mapping):
         result[i] = labels[e]

@@ -1,6 +1,5 @@
 from bvclassificator.simulation import Profile
 from bvclassificator.algorithm import Lattice
-from bvclassificator.algorithm import cluster_now
 
 # Global Parameters
 DIMENSION = 3
@@ -23,30 +22,35 @@ if __name__ == "__main__":
                 c.simulate(0, 1, False, 1, in_control=False)
             else:
                 c.simulate(0, 1, False, 0, in_control=True)
-            # print(f"(x,y) = {(i,j)}")
-            # print(f"Index = {c.index}")
 
             profile_list.append(c)
 
     grid.build(profile_list=profile_list)
-    #print(f"Grid points is {grid.grid_points}")
+    
+    grid.init_algo(n=8,
+                   k=2,
+                   p=4,
+                   b=100)
 
-    cluster_now(grid, 8, 2, 1)
+    grid.cluster_now()
     # print("Before cluster matching")
     # print(grid.labels, end = "\n\n")
     grid.do_cluster_matching()
 
-    print("After cluster matching")
-    print(grid.labels)
+    # print("After cluster matching")
+    # print(grid.labels)
 
     grid.find_final_label()
-    print("Percentages")
-    print(grid.percentage)
+    # print("Percentages")
+    # print(grid.percentage)
 
-    print("Final Label")
-    print(grid.final_label)
+    # print("Final Label")
+    # print(grid.final_label)
 
+    print("Clustering result:")
+    print(grid.labels_)
+    
+    
     grid.find_entropy()
-
     print("Entropy")
     print(grid.normalized_spatial_entropy)
