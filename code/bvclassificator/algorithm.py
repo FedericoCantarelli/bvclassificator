@@ -1,39 +1,31 @@
 import numpy as np
 import math
 from scipy.stats import multivariate_normal
+import random
+
+
+# Machine Learning
 from sklearn.cluster import KMeans
 from sklearn.metrics.cluster import contingency_matrix
-import random
+
+
+# FPCA
+from skfda.preprocessing.dim_reduction import FPCA
+from skfda.representation.grid import FDataGrid
+
+
+# Plots and graphics
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+from matplotlib.colors import ListedColormap
+from matplotlib import colormaps
+from matplotlib.patches import Patch
 
 
-import skfda
-from skfda.misc.hat_matrix import (
-    KNeighborsHatMatrix,
-    LocalLinearRegressionHatMatrix,
-    NadarayaWatsonHatMatrix,
-)
-from skfda.misc.kernels import uniform
-from skfda.preprocessing.smoothing import KernelSmoother
-from skfda.preprocessing.smoothing.validation import SmoothingParameterSearch
-
-
-from skfda.exploratory.visualization import FPCAPlot
-from skfda.preprocessing.dim_reduction import FPCA
-from skfda.representation.basis import (
-    BSplineBasis,
-    FourierBasis,
-    MonomialBasis,
-)
-
-
-#  Concurrency programming and code performances evaluation
-import time
-import concurrent.futures
-from itertools import repeat
-
-# DIMENSION = 3
+# For log
+DEBUG = False
+if DEBUG:
+    import time
 
 
 class Lattice:
@@ -103,7 +95,7 @@ class Lattice:
         self.b = b
 
     @property
-    def average_normalized_entropy(self):
+    def average_normalized_entropy_(self):
         """Find average normalized entropy in order to assess results quality
 
         Returns:
@@ -112,21 +104,24 @@ class Lattice:
         if self.clustered:
             return np.sum(self.spatial_entropy)/(np.log(self.k)*(self.dimension * self.dimension))
         else:
-            raise Exception("Error: you must first perform clustering.")
+            raise Exception(
+                "Error: you must first perform clustering and cluster matching.")
 
     @property
-    def classification_rate(self):
+    def classification_rate_(self):
         """Find classification rate.
 
         Returns:
             float: If available return classification rate, otherwise raise an exception. 
         """
         if self.clustered:
-            # ! Bisogna anche fare il cluster matching prima di fare il classification rate #
-            return np.sum(self.spatial_entropy)/(np.log(self.k)*(self.dimension * self.dimension))
+            new_labels = _cluster_mapping(self.final_label, self.label_matrix)
+            temp = _change_label(self.final_label, new_labels)
+            return np.sum(temp == self.label_matrix)/(self.label_matrix.shape[0]*self.label_matrix.shape[1])
 
         else:
-            raise Exception("Error: you must first perform clustering.")
+            raise Exception(
+                "Error: you must first perform clustering and cluster matching.")
 
     @property
     def labels_(self) -> np.ndarray:
@@ -138,7 +133,8 @@ class Lattice:
         if self.clustered:
             return self.final_label
         else:
-            raise Exception("Error: you must first perform clustering.")
+            raise Exception(
+                "Error: you must first perform clustering and cluster matching.")
 
     def build(self, profile_list: list):
         for p in profile_list:
@@ -146,6 +142,7 @@ class Lattice:
             self.label_matrix[p.y, p.x] = p.label
 
     def find_final_label(self):
+        self.clustered = True
         for i in range(self.dimension):
             for j in range(self.dimension):
                 for k in range(self.k):
@@ -173,7 +170,6 @@ class Lattice:
             self.spatial_entropy/np.log(self.k), 4)
 
     def cluster_now(self):
-        self.clustered = True
         for i in range(self.b):
             # Select n random nuclei from the lattice
             nuclei = _random_nuclei(self.n, self.dimension)
@@ -202,32 +198,50 @@ class Lattice:
             self.labels[i, :, :] = unfold.reshape(
                 self.dimension, self.dimension)
 
-    def plot_results(self):
-        # gs1 = gridspec.GridSpec(2, 6)
-        pass
-        # matrix_entropy = df.pivot(index='y', columns='x',values='entropy').values
-        # matrix_cluster = df.pivot(index='y', columns='x', values='label').values
+    def plot(self) -> None:
+        """Function to plot clusters map and entropy map if available, otherwise raise an exception.
+        """
 
-        # fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2)
-        # cmap = plt.cm.get_cmap('Dark2', np.max(matrix_cluster) + 1)
-        # im = ax1.imshow(matrix_cluster, cmap=cmap)
+        if not self.clustered:
+            raise Exception(
+                "Error: you must first perform clustering and cluster matching.")
 
-        # ax1.set_xticks([], labels=[])
-        # ax1.set_yticks([], labels=[])
+        if self.k <= 8:
+            colors = ["#1f78b4", "#ff7f00", "#33a02c", "#e31a1c",
+                      "#a6cee3", "#fdbf6f", "#b2df8a", "#e31a1c"]
+            my_cmap = ListedColormap(colors, name="my_cmap").resampled(self.k)
 
-        # ax1.set_title("Clustering Result")
+        else:
+            my_cmap = colormaps["viridis"].resampled(k)
 
-        # im2 = ax2.imshow(matrix_entropy)
+        fig = plt.figure(layout="constrained", figsize=(10, 5))
 
-        # ax2.set_xticks([], labels=[])
-        # ax2.set_yticks([], labels=[])
+        gs = gridspec.GridSpec(2, 2, figure=fig)
 
-        # cbar2 = ax2.figure.colorbar(im2, ax=ax2, fraction=0.046, pad=0.04)
-        # cbar2.remove()
-        # ax2.set_title("Spatial Entropy")
+        ax1 = plt.subplot(gs[:, :1])
+        ax2 = plt.subplot(gs[:, 1:])
 
-        # fig.tight_layout()
-        # plt.show()
+        ax1.imshow(self.final_label, cmap=my_cmap, rasterized=True)
+        im = ax2.imshow(self.spatial_entropy, cmap="YlOrBr_r", rasterized=True)
+        cbar = ax2.figure.colorbar(im, ax=ax2, fraction=0.046, pad=0.04)
+
+        ax1.set_xticks([])
+        ax1.set_yticks([])
+        ax2.set_xticks([])
+        ax2.set_yticks([])
+
+        ax1.set_title("Cluster Map", size=20, pad=15)
+        ax2.set_title("Normalized Entropy Map", size=20, pad=15)
+
+        legend_elements = []
+        for i in range(self.k):
+            legend_elements.append(
+                Patch(facecolor=my_cmap.colors[i], edgecolor='k', label=f"Cluster {i}"))
+
+        ax1.legend(handles=legend_elements,
+                   bbox_to_anchor=(-0.3, 0.5), loc="center left")
+
+        plt.show()
 
 
 def _change_label(arr: np.ndarray, new_label) -> np.ndarray:
@@ -407,7 +421,7 @@ def _kmeans_clustering(matrix: np.ndarray, k: int) -> np.ndarray:
 
 
 def _do_fda(arr: np.ndarray, frames: np.ndarray, p: int) -> np.ndarray:
-    fd = skfda.FDataGrid(
+    fd = FDataGrid(
         data_matrix=arr,
         grid_points=frames,
     )

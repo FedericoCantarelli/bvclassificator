@@ -40,11 +40,11 @@ class Profile:
             self.profile = self.func_profile
 
     def plot(self) -> None:
-        gs1 = gridspec.GridSpec(2, 6)
-        ax1 = plt.subplot(gs1[0, :-2])
-        ax2 = plt.subplot(gs1[1, :-2])
-        ax3 = plt.subplot(gs1[0, -2:])
-        ax4 = plt.subplot(gs1[1, -2:])
+        gs = gridspec.GridSpec(2, 6)
+        ax1 = plt.subplot(gs[0, :-2])
+        ax2 = plt.subplot(gs[1, :-2])
+        ax3 = plt.subplot(gs[0, -2:])
+        ax4 = plt.subplot(gs[1, -2:])
 
         ax1.plot(self.time_frames, self.profile, marker="D",
                  markerfacecolor="white", markersize=4, markeredgewidth=1)
