@@ -1,19 +1,14 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-import math
-
-
-# Global parameters
-DIMENSION = 128  #  Dimension of the grid
-
 
 
 class Profile:
-    def __init__(self, x: int, y: int, n_frames: int) -> None:
+    def __init__(self, x: int, y: int, time_period: float, fps: int) -> None:
         self.x = x
         self.y = y
-        self.time_frames = np.arange(0, n_frames)
+        self.time_frames = np.linspace(0, time_period-1, time_period*fps)
+
         self.label = None
         self.profile = None
         self.errors = None
@@ -74,13 +69,8 @@ class Profile:
         plt.tight_layout()
         plt.show()
 
-    @property
-    def index(self) -> int:
-        return self.y + self.x * DIMENSION
-
-    @property
-    def coordinates(self) -> tuple:
-        return (self.x, self.y)
+    def index(self, dim: int) -> int:
+        return self.y + self.x * dim
 
 
 def linear(arr: np.ndarray):
@@ -91,13 +81,23 @@ def quadratic(arr: np.ndarray):
     return np.power(arr, 2)
 
 
-def sim(arr: np.ndarray, tau):
-    if tau is None:
-        tau = 0
-    return 255/(1+np.exp(0.2*(arr-0.95*tau)))
+def sim(arr: np.ndarray, tau: int, H: float):
+    return 255/(1+np.exp(0.2*(arr - H*tau)))
 
 
 if __name__ == "__main__":
-    c = Profile(5, 5, 60, 300)
-    c.simulate(0, 1, True, 1, 50)
-    c.plot()
+    profile_list = []
+    for i in range(3):
+        for j in range(3):
+            c = Profile(i, j, 60, 1)
+            if c.index(3) in [0, 1, 3, 4]:
+                c.simulate(0, 1, True, 1, in_control=False)
+            else:
+                c.simulate(0, 1, True, 0, in_control=True)
+            # print(f"(x,y) = {(i,j)}")
+            # print(f"Index = {c.index}")
+
+            profile_list.append(c)
+
+    profile_list[0].plot()
+    profile_list[2].plot()

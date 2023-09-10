@@ -38,24 +38,26 @@ from itertools import repeat
 DIMENSION = 3
 
 class Lattice:
-    def __init__(self, dimension: int, n_frames: int, b: int, k) -> None:
-        x_range = np.arange(0, dimension)
-        y_range = np.arange(0, dimension)
-        self.grid_points = np.array([(x, y) for x in x_range for y in y_range])
+    def __init__(self, dimension:int, time_period: float, fps:int, b: int, k:int) -> None:
+        
+        # Dimension of the lattice
+        self.dimension = dimension
+        
+        # Grid points in the lattice in the form (x, y)
+        self.grid_points = np.array([(x, y) for x in np.arange(0, self.dimension) for y in np.arange(0, self.dimension)])
+        
+        # Matrix to store gorund truth labels of profiles
         self.label_matrix = np.zeros(shape=(dimension,
                                             dimension))
+        
+        # Number of frames
+        self.n_frames = time_period*fps
+        
         self.structure = np.zeros(
-            shape=(n_frames,
+            shape=(self.time_frames,
                    dimension,
                    dimension))
-
-        self.labels = np.zeros(shape=(b,
-                                      dimension,
-                                      dimension))
-
-        self.percentage = np.zeros(shape=(k,
-                                          dimension,
-                                          dimension))
+        
 
         self.final_label = np.zeros(shape=(dimension,
                                            dimension))
@@ -65,13 +67,45 @@ class Lattice:
 
         self.normalized_spatial_entropy = np.zeros(shape=(dimension,
                                                           dimension))
+        
 
-        self.dimension = dimension
 
-        self.time_frames = np.arange(0, n_frames)
 
-        self.k = k
-        self.b = b
+
+
+        
+        self.k = None
+        self.b = None
+        self.labels = None
+        self.percentage = None
+
+        
+
+        
+
+
+
+
+    def init_algo(self, n: int, k:int, p: int, b: int) -> None:
+        """Init algorithm parameters.
+
+        Args:
+            n (int): Number of select point over the grid to be used as nuclei
+            k (int): Number of clusters
+            p (int): Number of FPCs to be retained
+            b (int): Number of bootstrap replications
+
+        Returns:
+            None
+        """
+        self.labels = np.zeros(shape=(b,
+                                      self.dimension,
+                                      self.dimension))
+
+        self.percentage = np.zeros(shape=(k,
+                                          self.dimension,
+                                          self.dimension))
+
 
     @property
     def average_normalized_entropy(self):
@@ -342,45 +376,3 @@ def unfold_clusters(labels: list, mapping: np.ndarray) -> np.ndarray:
         result[i] = labels[e]
 
     return result
-
-
-
-
-if __name__ == "__main__":
-    grid = Lattice(DIMENSION, 60, 7, 5)
-
-    profile_list = []
-    for i in range(DIMENSION):
-        for j in range(DIMENSION):
-            c = Profile(i, j, 60)
-            if c.index in [0, 1, 3, 4]:
-                c.simulate(0, 1, False, 1, in_control=False)
-            else:
-                c.simulate(0, 1, False, 0, in_control=True)
-            # print(f"(x,y) = {(i,j)}")
-            # print(f"Index = {c.index}")
-
-            profile_list.append(c)
-
-    grid.build(profile_list=profile_list)
-    #print(f"Grid points is {grid.grid_points}")
-
-    cluster_now(grid, 8, 2, 1)
-    # print("Before cluster matching")
-    # print(grid.labels, end = "\n\n")
-    grid.do_cluster_matching()
-
-    print("After cluster matching")
-    print(grid.labels)
-
-    grid.find_final_label()
-    print("Percentages")
-    print(grid.percentage)
-
-    print("Final Label")
-    print(grid.final_label)
-
-    grid.find_entropy()
-
-    print("Entropy")
-    print(grid.normalized_spatial_entropy)
