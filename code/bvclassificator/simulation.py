@@ -6,21 +6,21 @@ import math
 
 # Global parameters
 DIMENSION = 128  #  Dimension of the grid
-STRIDE = 21  # Stride of the laser
+
 
 
 class Profile:
-    def __init__(self, x: int, y: int, n_frames: int, time_period: float) -> None:
+    def __init__(self, x: int, y: int, n_frames: int) -> None:
         self.x = x
         self.y = y
-        self.time_frames = np.linspace(0, time_period, n_frames)
+        self.time_frames = np.arange(0, n_frames)
         self.label = None
         self.profile = None
         self.errors = None
         self.func_profile = None
         self.err_params = None
 
-    def simulate(self, loc: float, scale: float, with_noise: bool, label: int, tau=None) -> None:
+    def simulate(self, loc: float, scale: float, with_noise: bool, label: int, in_control: bool) -> None:
         """_summary_
 
         Args:
@@ -29,7 +29,12 @@ class Profile:
             scale (float): Standard deviation of error normal distribution
         """
         self.label = label
-        self.func_profile = sim(self.time_frames, tau)
+        if in_control:
+            self.func_profile = linear(self.time_frames)
+
+        else:
+            self.func_profile = quadratic(self.time_frames)
+
         if with_noise:
             self.errors = np.random.normal(
                 loc, scale, self.time_frames.shape[0])
@@ -71,11 +76,19 @@ class Profile:
 
     @property
     def index(self) -> int:
-        return self.x + self.y * DIMENSION
+        return self.y + self.x * DIMENSION
 
     @property
     def coordinates(self) -> tuple:
         return (self.x, self.y)
+
+
+def linear(arr: np.ndarray):
+    return arr
+
+
+def quadratic(arr: np.ndarray):
+    return np.power(arr, 2)
 
 
 def sim(arr: np.ndarray, tau):

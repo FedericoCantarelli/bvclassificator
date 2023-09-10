@@ -171,15 +171,10 @@ class Lattice:
         self.final_label = np.argmax(self.percentage, axis=0)
 
     def do_cluster_matching(self):
-        baseline = self.labels[:, 0, 0]
-        unique_baseline = np.sort(np.unique(baseline))
-
-        for i in range(self.dimension):
-            for j in range(self.dimension):
-                new_labels = _cluster_mapping(baseline, self.labels[:, i, j])
-                unique_other = np.sort(np.unique(self.labels[:, i, j]))
-                m_d = _mapping_dict(unique_baseline, unique_other, new_labels)
-                self.labels[:, i, j] = _change_label(self.labels[:, i, j], m_d)
+        baseline = self.labels[0, :, :]
+        for i in range(self.labels.shape[0]):
+            new_labels = _cluster_mapping(self.labels[i, :, :], baseline)
+            self.labels[i, :, :] = _change_label(self.labels[i, :, :], new_labels)
 
     def find_entropy(self):
         for i in range(self.dimension):
@@ -192,19 +187,10 @@ class Lattice:
             self.spatial_entropy/np.log(self.k), 4)
 
 
-def _mapping_dict(ub: np.ndarray, ua: np.ndarray, l: np.ndarray) -> dict:
-    d = dict()
-    for a in ua:
-        d[a] = ub[l[np.where(ua == a)]]
-    return d
-
-
-def _change_label(element: np.ndarray, d: dict) -> np.ndarray:
-    final = np.zeros_like(element)
-    for i, e in enumerate(element):
-        for key in d.keys():
-            if e == key:
-                final[i] = d[key]
+def _change_label(arr: np.ndarray, new_label) -> np.ndarray:
+    final = np.zeros_like(arr)
+    for i, l in enumerate(new_label):
+        final[arr == i] = l
     return final
 
 
@@ -388,7 +374,7 @@ def do_fda(arr: np.ndarray, frames: np.ndarray) -> None:
         data_matrix=arr,
         grid_points=frames,
     )
-    fpca = FPCA(n_components=2)
+    fpca = FPCA(n_components=4)
     fd_score = fpca.fit_transform(fd)
     return fd_score
 
@@ -423,7 +409,7 @@ def cluster_now(lattice, n: int, k: int, p: int):
         #  Remap the cluster to original observation
         unfold = unfold_clusters(cluster_label, nuclei_map)
         # print(f"Unfolded labels: {unfold}")
-        print(f"Reshaped labels: {unfold.reshape(DIMENSION, DIMENSION)}")
+        print(f"Reshaped labels:\n {unfold.reshape(DIMENSION, DIMENSION)}")
 
         lattice.labels[i, :, :] = unfold.reshape(DIMENSION, DIMENSION)
 
@@ -437,7 +423,7 @@ def unfold_clusters(labels: list, mapping: np.ndarray) -> np.ndarray:
 
 
 if __name__ == "__main__":
-    grid = Lattice(DIMENSION, 60, 5, 5)
+    grid = Lattice(DIMENSION, 60, 7, 5)
 
     profile_list = []
     for i in range(DIMENSION):
@@ -453,9 +439,9 @@ if __name__ == "__main__":
             profile_list.append(c)
 
     grid.build(profile_list=profile_list)
-    print(f"Grid points is {grid.grid_points}")
+    #print(f"Grid points is {grid.grid_points}")
 
-    cluster_now(grid, 4, 2, 1)
+    cluster_now(grid, 8, 2, 1)
     # print("Before cluster matching")
     # print(grid.labels, end = "\n\n")
     grid.do_cluster_matching()
@@ -469,3 +455,8 @@ if __name__ == "__main__":
 
     print("Final Label")
     print(grid.final_label)
+
+    grid.find_entropy()
+
+    print("Entropy")
+    print(grid.normalized_spatial_entropy)

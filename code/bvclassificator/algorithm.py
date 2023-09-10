@@ -1,5 +1,5 @@
 import numpy as np
-import simulation
+# from simulation import Profile
 import math
 from scipy.stats import multivariate_normal
 from sklearn.cluster import KMeans
@@ -35,12 +35,10 @@ import time
 import concurrent.futures
 from itertools import repeat
 
-
-DIMENSION = 2
-
+DIMENSION = 3
 
 class Lattice:
-    def __init__(self, dimension: int, time_period: float, n_frames: int) -> None:
+    def __init__(self, dimension: int, n_frames: int, b: int, k) -> None:
         x_range = np.arange(0, dimension)
         y_range = np.arange(0, dimension)
         self.grid_points = np.array([(x, y) for x in x_range for y in y_range])
@@ -51,10 +49,12 @@ class Lattice:
                    dimension,
                    dimension))
 
-        self.labels = np.zeros(shape=(dimension,
+        self.labels = np.zeros(shape=(b,
+                                      dimension,
                                       dimension))
 
-        self.percentage = np.zeros(shape=(dimension,
+        self.percentage = np.zeros(shape=(k,
+                                          dimension,
                                           dimension))
 
         self.final_label = np.zeros(shape=(dimension,
@@ -68,9 +68,10 @@ class Lattice:
 
         self.dimension = dimension
 
-        self.time_frames = np.linspace(0, time_period, n_frames)
+        self.time_frames = np.arange(0, n_frames)
 
-        self.k = None
+        self.k = k
+        self.b = b
 
     @property
     def average_normalized_entropy(self):
@@ -92,15 +93,10 @@ class Lattice:
         self.final_label = np.argmax(self.percentage, axis=0)
 
     def do_cluster_matching(self):
-        baseline = self.labels[:, 0, 0]
-        unique_baseline = np.sort(np.unique(baseline))
-
-        for i in range(self.dimension):
-            for j in range(self.dimension):
-                new_labels = _cluster_mapping(baseline, self.labels[:, i, j])
-                unique_other = np.sort(np.unique(self.labels[:, i, j]))
-                m_d = _mapping_dict(unique_baseline, unique_other, new_labels)
-                self.labels[:, i, j] = _change_label(self.labels[:, i, j], m_d)
+        baseline = self.labels[0, :, :]
+        for i in range(self.labels.shape[0]):
+            new_labels = _cluster_mapping(self.labels[i, :, :], baseline)
+            self.labels[i, :, :] = _change_label(self.labels[i, :, :], new_labels)
 
     def find_entropy(self):
         for i in range(self.dimension):
@@ -113,19 +109,10 @@ class Lattice:
             self.spatial_entropy/np.log(self.k), 4)
 
 
-def _mapping_dict(ub: np.ndarray, ua: np.ndarray, l: np.ndarray) -> dict:
-    d = dict()
-    for a in ua:
-        d[a] = ub[l[np.where(ua == a)]]
-    return d
-
-
-def _change_label(element: np.ndarray, d: dict) -> np.ndarray:
-    final = np.zeros_like(element)
-    for i, e in enumerate(element):
-        for key in d.keys():
-            if e == key:
-                final[i] = d[key]
+def _change_label(arr: np.ndarray, new_label) -> np.ndarray:
+    final = np.zeros_like(arr)
+    for i, l in enumerate(new_label):
+        final[arr == i] = l
     return final
 
 
@@ -150,8 +137,8 @@ def random_nuclei(args: tuple) -> np.ndarray:
     assert n <= dim**2, "Error: selected nuclei must be less or equal to available points number."
     nuclei = []
     while len(nuclei) < n:
-        x_coord = random.randint(0, dim)
-        y_coord = random.randint(0, dim)
+        x_coord = random.randint(0, dim-1)
+        y_coord = random.randint(0, dim-1)
         if (x_coord, y_coord) not in nuclei:
             nuclei.append((x_coord, y_coord))
     return np.array(nuclei)
@@ -300,88 +287,100 @@ def kmeans_clustering(matrix: np.ndarray, k: int) -> np.ndarray:
     Returns:
         np.ndarray: ordered cluster label
     """
-    kmeans = KMeans(n_clusters=k).fit(matrix)
+    kmeans = KMeans(n_clusters=k, n_init="auto").fit(matrix)
     return kmeans.labels_
 
 
-def do_fda(arr: np.ndarray, frames: np.ndarray, bandwidth: float) -> None:
+def do_fda(arr: np.ndarray, frames: np.ndarray) -> None:
     fd = skfda.FDataGrid(
         data_matrix=arr,
         grid_points=frames,
     )
-
+    fpca = FPCA(n_components=4)
+    fd_score = fpca.fit_transform(fd)
+    return fd_score
 
 
 def cluster_now(lattice, n: int, k: int, p: int):
     lattice.k = k
 
-    # Select n random nuclei from the lattice
-    nuclei = random_nuclei(n=n,
-                           dim=lattice.dimension)
+    for i in range(lattice.b):
+        # Select n random nuclei from the lattice
+        nuclei = random_nuclei((n, lattice.dimension))
+        # print(f"Nuclei are: {nuclei}")
 
-    # Mapping each gridpoint to nearest nucleus
-    nuclei_map = nuclei_mapping(grid_points=lattice.grid_points,
-                                nuclei=nuclei)
+        # Mapping each gridpoint to nearest nucleus
+        nuclei_map = nuclei_mapping(grid_points=lattice.grid_points,
+                                    nuclei=nuclei)
 
-    # Compute representative
-    rep_functions = group(nuclei=nuclei,
-                          mapping=nuclei_map,
-                          grid_points=lattice.grid_points,
-                          s=lattice.structure)
+        # print(f"Mapping is: {nuclei_map}")
 
-    do_fda(rep_functions, lattice.time_frames)
+        # Compute representative
+        rep_functions = group(nuclei=nuclei,
+                              mapping=nuclei_map,
+                              grid_points=lattice.grid_points,
+                              s=lattice.structure)
+
+        # Compute scores of FPCA
+        scores = do_fda(rep_functions, lattice.time_frames)
+
+        # Cluster the score
+        cluster_label = kmeans_clustering(scores, 2)
+        # print(f"Nuclei labels: {cluster_label}")
+
+        #  Remap the cluster to original observation
+        unfold = unfold_clusters(cluster_label, nuclei_map)
+        # print(f"Unfolded labels: {unfold}")
+        print(f"Reshaped labels:\n {unfold.reshape(DIMENSION, DIMENSION)}")
+
+        lattice.labels[i, :, :] = unfold.reshape(DIMENSION, DIMENSION)
+
+
+def unfold_clusters(labels: list, mapping: np.ndarray) -> np.ndarray:
+    result = np.zeros_like(mapping)
+    for i, e in enumerate(mapping):
+        result[i] = labels[e]
+
+    return result
+
+
 
 
 if __name__ == "__main__":
-    start = time.perf_counter()
-    #########
-    # VARIE #
-    #########
-    # x_range = np.arange(0, DIMENSION)
-    # y_range = np.arange(0, DIMENSION)
-    # grid = Lattice(dimension=DIMENSION,
-    #                time_period=60,
-    #                n_frames=60)
+    grid = Lattice(DIMENSION, 60, 7, 5)
 
-    # # Create structure
-    # profile_list = []
-    # for y in y_range:
-    #     for x in x_range:
-    #         c = simulation.Profile(x, y, n_frames=60, time_period=60)
-    #         c.simulate(loc=0,
-    #                    scale=1,
-    #                    with_noise=True,
-    #                    label=1,
-    #                    tau=5)
-    #         profile_list.append(c)
+    profile_list = []
+    for i in range(DIMENSION):
+        for j in range(DIMENSION):
+            c = Profile(i, j, 60)
+            if c.index in [0, 1, 3, 4]:
+                c.simulate(0, 1, False, 1, in_control=False)
+            else:
+                c.simulate(0, 1, False, 0, in_control=True)
+            # print(f"(x,y) = {(i,j)}")
+            # print(f"Index = {c.index}")
 
-    # grid.build(profile_list=profile_list)
-    # cluster_now(lattice=grid,
-    #             n=2,
-    #             k=3,
-    #             p=2)
+            profile_list.append(c)
 
-    ##############
-    # Concurrent #
-    ##############
+    grid.build(profile_list=profile_list)
+    #print(f"Grid points is {grid.grid_points}")
 
-    # with concurrent.futures.ProcessPoolExecutor() as executor:
-    #     results = executor.map(random_nuclei, [(10, 128) for _ in range(50)])
-    #     for result in results:
-    #         print(result)
+    cluster_now(grid, 8, 2, 1)
+    # print("Before cluster matching")
+    # print(grid.labels, end = "\n\n")
+    grid.do_cluster_matching()
 
-    ##############
-    # Sequential #
-    ##############
-    l = []
-    for _ in range(50):
-        a = random_nuclei((10, 128))
-        l.append(a)
+    print("After cluster matching")
+    print(grid.labels)
 
-    print(l)
+    grid.find_final_label()
+    print("Percentages")
+    print(grid.percentage)
 
-    ###############
-    # Performance #
-    ###############
-    finish = time.perf_counter()
-    print(f"Secondi passati {finish-start}")
+    print("Final Label")
+    print(grid.final_label)
+
+    grid.find_entropy()
+
+    print("Entropy")
+    print(grid.normalized_spatial_entropy)

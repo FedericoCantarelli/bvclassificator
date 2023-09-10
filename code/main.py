@@ -1,43 +1,42 @@
-import bvclustering as bvc
+from bvclassificator.simulation import Profile
+from bvclassificator.algorithm import Lattice
+# from bvclassificator.algorithm import cluster_now
+from easy_implementation import cluster_now
 
-# Original
-# b_0 = (5.421, 0.0105)
-# b_1 = (-2.165e-4, 1.773e-5)
-# b_2 = (-0.0000001, -0.000523)
-# error = (0, 0.0005)
+# Global Parameters
+DIMENSION = 3
 
-b_0 = (5.421, 0.0105)
-b_1 = (-2.165e-3, 1.773e-4)
-b_2 = (-0.0000001, -0.000523)
-error = (0, 0.00005)
+grid = Lattice(DIMENSION, 60, 7, 5)
 
 profile_list = []
-
-h = 0
-for i in range(4):
-    for j in range(4):
-        if i == 3 and j == 3:
-            dev_ent = 3
-
-        elif i == 2 and j == 3:
-            dev_ent = 3
-
-        elif i == 3 and j == 2:
-            dev_ent = 3
-
+for i in range(DIMENSION):
+    for j in range(DIMENSION):
+        c = Profile(i, j, 60)
+        if c.index in [0, 1, 3, 4]:
+            c.simulate(0, 1, False, 1, in_control=False)
         else:
-            dev_ent = None
-        prova = bvc.Simulation(str(h), i, j, b_0, b_1, b_2[0], b_2[1],
-                               error, deviation_entity=dev_ent)
-        prova.run()
-        h += 1
+            c.simulate(0, 1, False, 0, in_control=True)
+            profile_list.append(c)
 
-        profile_list.append(prova)
+grid.build(profile_list=profile_list)
+# print(f"Grid points is {grid.grid_points}")
 
-strc = bvc.analysis.Structure(profile_list)
+cluster_now(grid, 8, 2, 1)
+# print("Before cluster matching")
+# print(grid.labels, end = "\n\n")
+grid.do_cluster_matching()
 
-df, avg_entropy = strc.cluster_now(12, 1000, 2, 3)
+print("After cluster matching")
+print(grid.labels)
 
-print(df)
+grid.find_final_label()
+print("Percentages")
+print(grid.percentage)
 
-bvc.analysis.plot_results(df)
+print("Final Label")
+print(grid.final_label)
+
+grid.find_entropy()
+
+print("Entropy")
+print(grid.normalized_spatial_entropy)
