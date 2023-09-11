@@ -4,7 +4,7 @@ from scipy.stats import multivariate_normal
 import random
 
 
-# Machine Learning
+# Machine Learning algorithms
 from sklearn.cluster import KMeans
 from sklearn.metrics.cluster import contingency_matrix
 
@@ -20,6 +20,7 @@ import matplotlib.gridspec as gridspec
 from matplotlib.colors import ListedColormap
 from matplotlib import colormaps
 from matplotlib.patches import Patch
+from matplotlib.lines import Line2D
 
 
 # For log
@@ -29,7 +30,7 @@ if DEBUG:
 
 
 class Lattice:
-    def __init__(self, dimension: int, time_period: float, fps: int, b: int, k: int) -> None:
+    def __init__(self, dimension: int, time_period: float, fps: int, simulation: bool) -> None:
 
         #  Dimension of the lattice
         self.dimension = dimension
@@ -39,8 +40,11 @@ class Lattice:
             0, self.dimension) for y in np.arange(0, self.dimension)])
 
         # Matrix to store gorund truth labels of profiles
-        self.label_matrix = np.zeros(shape=(dimension,
-                                            dimension))
+        if simulation:
+            self.label_matrix = np.zeros(shape=(dimension,
+                                                dimension))
+
+        self.simulation = simulation
 
         # Compute time frames
         self.time_frames = np.linspace(0, time_period-1, fps*time_period)
@@ -114,6 +118,7 @@ class Lattice:
         Returns:
             float: If available return classification rate, otherwise raise an exception. 
         """
+        assert self.simulation, "You can compute classification rate only on simulated data."
         if self.clustered:
             new_labels = _cluster_mapping(self.final_label, self.label_matrix)
             temp = _change_label(self.final_label, new_labels)
@@ -137,9 +142,13 @@ class Lattice:
                 "Error: you must first perform clustering and cluster matching.")
 
     def build(self, profile_list: list):
-        for p in profile_list:
-            self.structure[:, p.y, p.x] = p.profile
-            self.label_matrix[p.y, p.x] = p.label
+        if self.simulation:
+            for p in profile_list:
+                self.structure[:, p.y, p.x] = p.profile
+                self.label_matrix[p.y, p.x] = p.label
+        else:
+            for p in profile_list:
+                self.structure[:, p.y, p.x] = p.profile
 
     def find_final_label(self):
         self.clustered = True
@@ -198,6 +207,46 @@ class Lattice:
             self.labels[i, :, :] = unfold.reshape(
                 self.dimension, self.dimension)
 
+    def plot_profiles(self) -> None:
+        fig, ax = plt.subplots()
+
+        if self.simulation:
+            if np.unique(self.label_matrix).shape[0] <= 8:
+                colors = ["#1f78b4", "#ff7f00", "#33a02c", "#e31a1c",
+                          "#a6cee3", "#fdbf6f", "#b2df8a", "#e31a1c"]
+                my_cmap = ListedColormap(
+                    colors, name="my_cmap").resampled(np.unique(self.label_matrix).shape[0])
+
+            else:
+                my_cmap = colormaps["viridis"].resampled(np.unique(self.label_matrix).shape[0])
+
+            for i in range(self.dimension):
+                for j in range(self.dimension):
+                    l = f"Label {self.label_matrix[i,j]}"
+                    col = my_cmap.colors[int(self.label_matrix[i, j])]
+
+                    ax.plot(
+                        self.time_frames, self.structure[:, i, j], color=col)
+
+            legend_elements = [Line2D([0], [0], color=my_cmap.colors[int(
+                e)], label=f"Label {int(e)}") for e in np.unique(self.label_matrix)]
+            ax.legend(handles=legend_elements)
+
+        else:
+            my_cmap = colormaps["viridis"].resampled(
+                self.dimension * self.dimension)
+            for i in range(self.dimension):
+                for j in range(self.dimension):
+                    col = my_cmap.colors[i*self.dimension + j]
+
+                    ax.plot(
+                        self.time_frames, self.structure[:, i, j], color=col)
+
+        ax.set_ylim([0, 20])
+        ax.set_title("Observed Profiles", size=20, pad=10)
+
+        plt.show()
+
     def plot(self) -> None:
         """Function to plot clusters map and entropy map if available, otherwise raise an exception.
         """
@@ -212,7 +261,7 @@ class Lattice:
             my_cmap = ListedColormap(colors, name="my_cmap").resampled(self.k)
 
         else:
-            my_cmap = colormaps["viridis"].resampled(k)
+            my_cmap = colormaps["viridis"].resampled(self.k)
 
         fig = plt.figure(layout="constrained", figsize=(10, 5))
 
