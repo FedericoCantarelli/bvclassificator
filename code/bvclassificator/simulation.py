@@ -15,7 +15,7 @@ class Profile:
         self.func_profile = None
         self.err_params = None
 
-    def simulate(self, loc: float, scale: float, with_noise: bool, label: int, in_control: bool) -> None:
+    def simulate(self, loc: float, scale: float, with_noise: bool, label: int, in_control: bool, tau = None) -> None:
         """_summary_
 
         Args:
@@ -25,10 +25,10 @@ class Profile:
         """
         self.label = label
         if in_control:
-            self.func_profile = linear(self.time_frames)
+            self.func_profile = sim(self.time_frames, 0, 0.95)
 
         else:
-            self.func_profile = quadratic(self.time_frames)
+            self.func_profile = sim(self.time_frames, tau, 0.95)
 
         if with_noise:
             self.errors = np.random.normal(
@@ -73,12 +73,12 @@ class Profile:
         return self.y + self.x * dim
 
 
-def linear(arr: np.ndarray):
-    return arr
+# def linear(arr: np.ndarray):
+#     return arr
 
 
-def quadratic(arr: np.ndarray):
-    return np.power(arr, 2)
+# def quadratic(arr: np.ndarray):
+#     return np.power(arr, 2)
 
 
 def sim(arr: np.ndarray, tau: int, H: float):

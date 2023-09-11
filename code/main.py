@@ -1,8 +1,10 @@
 from bvclassificator.simulation import Profile
 from bvclassificator.algorithm import Lattice
+import time
+
 
 # Global Parameters
-DIMENSION = 3
+DIMENSION = 10
 
 if __name__ == "__main__":
     grid = Lattice(DIMENSION,
@@ -18,8 +20,9 @@ if __name__ == "__main__":
                         y=j,
                         time_period=60,
                         fps=1)
-            if c.index(DIMENSION) in [0, 1, 3, 4]:
-                c.simulate(0, 1, True, 0, in_control=False)
+            if c.index(DIMENSION) in [0, 1, 2, 10, 11, 12, 20, 21, 22]:
+                c.simulate(0, 1, True, 0, in_control=False, tau=50)
+
             else:
                 c.simulate(0, 1, True, 1, in_control=True)
 
@@ -28,37 +31,17 @@ if __name__ == "__main__":
 
     grid.build(profile_list=profile_list)
 
-    grid.init_algo(n=8,
+    grid.init_algo(n=60,
                    k=2,
-                   p=2,
+                   p=10,
                    b=100)
 
-    # ! Queste andranno fatte direttamente dentro a cluster
+    start_time = time.time()
     grid.cluster_now()
-    # print("Before cluster matching")
-    # print(grid.labels, end = "\n\n")
-    grid.do_cluster_matching()
 
-    #  print("After cluster matching")
-    #  print(grid.labels)
-
-    grid.find_final_label()
-    # print("Percentages")
-    #  print(grid.percentage)
-
-    # print("Final Label")
-    # print(grid.final_label)
-
-    print("Clustering result:")
-    print(grid.labels_)
-
-    grid.find_entropy()
-    print("Average normalized entropy")
-    print(grid.average_normalized_entropy_)
-
-    print(grid.labels)
+    print("Time: {} seconds".format(time.time()-start_time))
 
     print("Classification rate")
-    # print(grid.classification_rate_)
+    print(grid.classification_rate_)
 
-    grid.plot_profiles()
+    grid.plot()

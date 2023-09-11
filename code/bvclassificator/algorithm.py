@@ -178,7 +178,7 @@ class Lattice:
         self.normalized_spatial_entropy = np.round(
             self.spatial_entropy/np.log(self.k), 4)
 
-    def cluster_now(self):
+    def cluster_now(self, compute_entropy = True):
         for i in range(self.b):
             # Select n random nuclei from the lattice
             nuclei = _random_nuclei(self.n, self.dimension)
@@ -206,6 +206,13 @@ class Lattice:
             unfold = _unfold_clusters(cluster_label, nuclei_map)
             self.labels[i, :, :] = unfold.reshape(
                 self.dimension, self.dimension)
+        
+        self.do_cluster_matching()
+        self.find_final_label()
+
+        if compute_entropy:
+            self.find_entropy()
+
 
     def plot_profiles(self) -> None:
         fig, ax = plt.subplots()
@@ -242,11 +249,9 @@ class Lattice:
 
                     ax.plot(
                         self.time_frames, self.structure[:, i, j], color=col)
-
-        ax.set_ylim([0, 20])
         ax.set_title("Observed Profiles", size=20, pad=10)
-
         plt.show()
+
 
     def plot(self) -> None:
         """Function to plot clusters map and entropy map if available, otherwise raise an exception.
