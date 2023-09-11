@@ -218,7 +218,8 @@ class Lattice:
                     colors, name="my_cmap").resampled(np.unique(self.label_matrix).shape[0])
 
             else:
-                my_cmap = colormaps["viridis"].resampled(np.unique(self.label_matrix).shape[0])
+                my_cmap = colormaps["viridis"].resampled(
+                    np.unique(self.label_matrix).shape[0])
 
             for i in range(self.dimension):
                 for j in range(self.dimension):
@@ -413,7 +414,7 @@ def _group(nuclei: np.ndarray, mapping: np.ndarray, grid_points: np.ndarray, str
     d = np.zeros(shape=(nuclei.shape[0], structure.shape[0]))
     max_dist, min_dist = _max_min_distance(nuclei)
 
-    # ! Find sigma <- CONTROLLARE SE È STD O VAR
+    # Find sigma
     sigma = max_dist/min_dist
 
     # Compute covariance matrix for bivariate normal distribution
