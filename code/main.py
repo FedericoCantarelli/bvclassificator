@@ -4,7 +4,7 @@ import time
 
 
 # Global Parameters
-DIMENSION = 10
+DIMENSION = 50
 
 if __name__ == "__main__":
     grid = Lattice(DIMENSION,
@@ -13,7 +13,6 @@ if __name__ == "__main__":
                    simulation=True)
 
     profile_list = []
-    k = 0
     for i in range(DIMENSION):
         for j in range(DIMENSION):
             c = Profile(x=i,
@@ -21,20 +20,19 @@ if __name__ == "__main__":
                         time_period=60,
                         fps=1)
             if c.index(DIMENSION) in [0, 1, 2, 10, 11, 12, 20, 21, 22]:
-                c.simulate(0, 1, True, 0, in_control=False, tau=50)
+                c.simulate(0, 1, True, 0, tau=50, h=0.95)
 
             else:
-                c.simulate(0, 1, True, 1, in_control=True)
+                c.simulate(0, 1, True, 1, tau=0, h=0.95)
 
-            k += 1
             profile_list.append(c)
 
     grid.build(profile_list=profile_list)
 
-    grid.init_algo(n=60,
+    grid.init_algo(n=30,
                    k=2,
-                   p=10,
-                   b=100)
+                   p=3,
+                   b=10)
 
     start_time = time.time()
     grid.cluster_now()

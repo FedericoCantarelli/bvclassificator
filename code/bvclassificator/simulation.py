@@ -15,7 +15,7 @@ class Profile:
         self.func_profile = None
         self.err_params = None
 
-    def simulate(self, loc: float, scale: float, with_noise: bool, label: int, in_control: bool, tau = None) -> None:
+    def simulate(self, loc: float, scale: float, with_noise: bool, label: int, tau = 0, h=0.95) -> None:
         """_summary_
 
         Args:
@@ -24,11 +24,8 @@ class Profile:
             scale (float): Standard deviation of error normal distribution
         """
         self.label = label
-        if in_control:
-            self.func_profile = sim(self.time_frames, 0, 0.95)
-
-        else:
-            self.func_profile = sim(self.time_frames, tau, 0.95)
+        
+        self.func_profile = sim(self.time_frames, tau, h)
 
         if with_noise:
             self.errors = np.random.normal(
@@ -91,9 +88,9 @@ if __name__ == "__main__":
         for j in range(3):
             c = Profile(i, j, 60, 1)
             if c.index(3) in [0, 1, 3, 4]:
-                c.simulate(0, 1, True, 1, in_control=False)
+                c.simulate(0, 1, True, 1)
             else:
-                c.simulate(0, 1, True, 0, in_control=True)
+                c.simulate(0, 1, True, 0)
             # print(f"(x,y) = {(i,j)}")
             # print(f"Index = {c.index}")
 

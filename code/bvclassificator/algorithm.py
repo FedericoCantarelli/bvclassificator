@@ -23,12 +23,6 @@ from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
 
 
-# For log
-DEBUG = False
-if DEBUG:
-    import time
-
-
 class Lattice:
     def __init__(self, dimension: int, time_period: float, fps: int, simulation: bool) -> None:
 
@@ -180,6 +174,8 @@ class Lattice:
 
     def cluster_now(self, compute_entropy = True):
         for i in range(self.b):
+            if i%10==0:
+                print(f"Bootstrap {i}")
             # Select n random nuclei from the lattice
             nuclei = _random_nuclei(self.n, self.dimension)
             # print(f"Nuclei are: {nuclei}")
@@ -200,7 +196,7 @@ class Lattice:
                              p=self.p)
 
             # Cluster the score
-            cluster_label = _kmeans_clustering(scores, 2)
+            cluster_label = _kmeans_clustering(scores, self.k)
 
             #  Remap the cluster to original observation
             unfold = _unfold_clusters(cluster_label, nuclei_map)
@@ -212,6 +208,7 @@ class Lattice:
 
         if compute_entropy:
             self.find_entropy()
+
 
 
     def plot_profiles(self) -> None:
@@ -491,3 +488,5 @@ def _unfold_clusters(labels: list, mapping: np.ndarray) -> np.ndarray:
         result[i] = labels[e]
 
     return result
+
+
