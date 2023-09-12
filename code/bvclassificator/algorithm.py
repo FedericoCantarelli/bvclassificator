@@ -4,9 +4,18 @@ from scipy.stats import multivariate_normal
 import random
 
 
+
+import os
+from PIL import Image
+import shutil
+import json
+import time
+
+
 # Machine Learning algorithms
 from sklearn.cluster import KMeans
 from sklearn.metrics.cluster import contingency_matrix
+from sklearn.metrics import precision_score, recall_score
 
 
 # FPCA
@@ -24,10 +33,13 @@ from matplotlib.lines import Line2D
 
 
 class Lattice:
-    def __init__(self, dimension: int, time_period: float, fps: int, simulation: bool) -> None:
+    def __init__(self, dimension: int, time_period: float, fps: int, simulation: bool, id_: str, run: None) -> None:
 
         #  Dimension of the lattice
         self.dimension = dimension
+
+        # Lattice id
+        self.id_ = id_
 
         # Grid points in the lattice in the form (x, y)
         self.grid_points = np.array([(x, y) for x in np.arange(
@@ -56,7 +68,10 @@ class Lattice:
 
         self.normalized_spatial_entropy = np.zeros(shape=(dimension,
                                                           dimension))
-
+        
+        # Funct object
+        self.func_object = None
+        
         #  Attributes initialized by calling init_algo()
         self.n = None
         self.k = None
@@ -67,6 +82,10 @@ class Lattice:
 
         # Attribute to verify that clustering has been done
         self.clustered = False
+        self.execution_time = None
+
+        # Attributo per tenere traccia delle diverse tun
+        self.run = run
 
     def init_algo(self, n: int, k: int, p: int, b: int) -> None:
         """Init algorithm parameters.
@@ -116,11 +135,52 @@ class Lattice:
         if self.clustered:
             new_labels = _cluster_mapping(self.final_label, self.label_matrix)
             temp = _change_label(self.final_label, new_labels)
-            return np.sum(temp == self.label_matrix)/(self.label_matrix.shape[0]*self.label_matrix.shape[1])
+            return np.sum(temp == self.label_matrix)/(self.dimension*self.dimension)
 
         else:
             raise Exception(
                 "Error: you must first perform clustering and cluster matching.")
+        
+
+    @property
+    def precision_score_(self):
+        """Find precision score in binary clustering.
+
+        Returns:
+            float: If available return precision score, otherwise raise an exception. 
+        """
+        assert self.simulation, "You can compute classification rate only on simulated data."
+        assert self.k == 2, "Precision score is available only in binary clusterization"
+        if self.clustered:
+            new_labels = _cluster_mapping(self.final_label, self.label_matrix)
+            temp = _change_label(self.final_label, new_labels)
+            return precision_score(self.label_matrix.reshape((self.dimension*self.dimension, 1)), temp.reshape((self.dimension*self.dimension, 1)))
+
+        else:
+            raise Exception(
+                "Error: you must first perform clustering and cluster matching.")
+        
+
+
+    @property
+    def recall_score_(self):
+        """Find recall score in binary clustering.
+
+        Returns:
+            float: If available return recall score, otherwise raise an exception. 
+        """
+        assert self.simulation, "You can compute classification rate only on simulated data."
+        assert self.k == 2, "Recall score is available only in binary clusterization"
+        if self.clustered:
+            new_labels = _cluster_mapping(self.final_label, self.label_matrix)
+            temp = _change_label(self.final_label, new_labels)
+            return recall_score(self.label_matrix.reshape((self.dimension*self.dimension, 1)), temp.reshape((self.dimension*self.dimension, 1)))
+
+        else:
+            raise Exception(
+                "Error: you must first perform clustering and cluster matching.")
+        
+
 
     @property
     def labels_(self) -> np.ndarray:
@@ -136,10 +196,17 @@ class Lattice:
                 "Error: you must first perform clustering and cluster matching.")
 
     def build(self, profile_list: list):
+        arr = []
         if self.simulation:
             for p in profile_list:
+                arr.append(p.profile)
                 self.structure[:, p.y, p.x] = p.profile
-                self.label_matrix[p.y, p.x] = p.label
+                self.label_matrix[p.x, p.y] = p.label
+
+            self.func_object= FDataGrid(
+                data_matrix=arr,
+                grid_points=self.time_frames
+            )
         else:
             for p in profile_list:
                 self.structure[:, p.y, p.x] = p.profile
@@ -173,9 +240,8 @@ class Lattice:
             self.spatial_entropy/np.log(self.k), 4)
 
     def cluster_now(self, compute_entropy = True):
+        start_time = time.time()
         for i in range(self.b):
-            if i%10==0:
-                print(f"Bootstrap {i}")
             # Select n random nuclei from the lattice
             nuclei = _random_nuclei(self.n, self.dimension)
             # print(f"Nuclei are: {nuclei}")
@@ -208,6 +274,34 @@ class Lattice:
 
         if compute_entropy:
             self.find_entropy()
+        
+        self.execution_time = time.time()-start_time
+    
+
+
+    def save_log_json(self, root: str):
+        location = _build_path(root, self)
+        
+        output_file = os.path.join(location, self.run + ".json")
+        p = self.precision_score_
+        r = self.recall_score_
+   
+        dictionary = dict(scenario=self.id_,
+                          run=self.run,
+                          k=self.k,
+                          n=self.n,
+                          b=self.b,
+                          p=self.p,
+                          entropy=self.average_normalized_entropy_,
+                          classification_rate=self.classification_rate_,
+                          precision=p,
+                          recall=r,
+                          f1score=2*(r*p)/(r+p),
+                          execution_time=self.execution_time)
+
+        with open(output_file, "w") as file:
+            json.dump(dictionary, file, indent=4)
+
 
 
 
@@ -295,6 +389,59 @@ class Lattice:
 
         plt.show()
 
+    
+    def func_plot(self) -> None:
+        self.func_object.plot()
+        plt.show()
+
+
+
+    def save_in_gif(self, root: str, cmap_string: str = "plasma", milliseconds: int = 50):
+        # Build location
+        location = _build_path(root, self)
+
+        # Build temporary location
+        temp_location = os.path.join(location, "temp")
+        if not os.path.exists(temp_location):
+            # If not, then create it
+            os.makedirs(temp_location)
+
+
+        temp = (self.structure - np.min(self.structure))/(np.max(self.structure)-np.min(self.structure))
+
+        _min, _max = np.amin(temp), np.amax(temp)
+        
+        for i, f in enumerate(temp):
+            name = str(i) + ".png"
+            save_location = os.path.join(temp_location, name)
+            plt.imsave(save_location, f.T, vmax=_max, vmin=_min, cmap=cmap_string)
+
+        frames_gif = []
+        for i in range(temp.shape[0]):
+            name = str(i) + ".png"
+            saved_location = os.path.join(temp_location, name)
+            img = Image.open(saved_location)
+            frames_gif.append(img)
+
+        name = self.id_ + "_run" + self.run + ".gif"
+
+        # Save as GIF
+        frames_gif[0].save(os.path.join(location, name), save_all=True, append_images=frames_gif[1:], loop=0,
+                           duration=milliseconds)
+
+        shutil.rmtree(temp_location)
+        del temp
+        return None
+
+
+def _build_path(root, lattice):
+    location = os.path.join(root, lattice.id_)
+    if not os.path.exists(location):
+        os.mkdir(location)
+    return location
+
+
+
 
 def _change_label(arr: np.ndarray, new_label) -> np.ndarray:
     final = np.zeros_like(arr)
@@ -359,13 +506,6 @@ def _max_min_distance(coordinates: np.ndarray):
             min_dist = min(min_dist, distance)
 
     return max_dist, min_dist
-
-
-# def init_lattice():
-#     x_range = np.arange(0, DIMENSION)
-#     y_range = np.arange(0, DIMENSION)
-#     grid_points = np.array([(x, y) for x in x_range for y in y_range])
-#     return grid_points
 
 
 def _indexing_coordinates_array(coordinates_list: list):
@@ -488,5 +628,3 @@ def _unfold_clusters(labels: list, mapping: np.ndarray) -> np.ndarray:
         result[i] = labels[e]
 
     return result
-
-
