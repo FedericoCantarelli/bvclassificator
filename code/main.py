@@ -3,11 +3,11 @@ from bvclassificator.algorithm import Lattice
 from bvclassificator.runscenarios import generate_defect, generate_combinations
 
 # Global Parameters
-DIMENSION = 10
-SCENARIOS = 3
+DIMENSION = 50
+SCENARIOS = 50
 SCENARIO_NAME = "S1"
-TAU = 60
-DEFECT_PARAMS = (4, 2, 2)
+TAU = 5
+DEFECT_PARAMS = (2, 2, 2)
 ROOT = "/Users/federicocantarelli/Documents/bvclassificator/output"
 
 
@@ -44,8 +44,8 @@ def create_list(index):
 if __name__ == "__main__":
 
     combinations = generate_combinations(scenario=SCENARIO_NAME,
-                                         n_list=[50],
-                                         b_list=[100])
+                                         n_list=[70],
+                                         b_list=[10,40,100])
 
     for i, c in enumerate(combinations):
         for run in range(SCENARIOS):
@@ -62,22 +62,12 @@ if __name__ == "__main__":
                            run=str(run))
 
             grid.build(profile_list=create_list(index))
+            grid.build_smooth_func(bandwidth=1.5)
             grid.init_algo(n=c[1],
                            k=2,
-                           p=2,
+                           explained_variance_pct=0.9,
                            b=c[2])
             grid.cluster_now()
-            grid.save_in_gif(root=ROOT)
             grid.save_log_json(root=ROOT)
 
-            grid.plot()
-
-            print("\n\n\n Run {}".format(run))
-            print("Defect matrix:\n {}".format(matrix))
-
-            print("GT label:\n {}".format(grid.label_matrix))
-
-            print("Final labels:\n {}".format(grid.final_label))
-
-            print("Entropy: {}".format(grid.average_normalized_entropy_))
-            print("Classrate: {}".format(grid.classification_rate_))
+        print((i*SCENARIOS+run)/(SCENARIOS*len(combinations))*100, end = "\r")
