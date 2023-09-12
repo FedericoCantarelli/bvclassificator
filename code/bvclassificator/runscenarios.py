@@ -1,9 +1,4 @@
-import numpy as npcd ..
-
-
-class Scenarios:
-    def __init__(self):
-        pass
+import numpy as np
 
 
 def _generate_defect(dimension: int, defect_dimension: int, width: int):
