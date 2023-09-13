@@ -1,20 +1,17 @@
+# Scientific Calculation Packaged
 import numpy as np
 import math
 from scipy.stats import multivariate_normal
 import random
 
-
+# Support Packages
 import os
 from PIL import Image
 import shutil
-import json
-import time
-
 
 # Machine Learning
 from sklearn.cluster import KMeans
 from sklearn.metrics.cluster import contingency_matrix
-from sklearn.metrics import precision_score, recall_score
 
 # FDA
 from skfda.preprocessing.smoothing import KernelSmoother
@@ -22,10 +19,8 @@ from skfda.misc.hat_matrix import NadarayaWatsonHatMatrix
 from skfda.representation.grid import FDataGrid
 from skfda.exploratory import stats
 
-
 # FPCA
 from skfda.preprocessing.dim_reduction import FPCA
-
 
 # Plots and graphics
 import matplotlib.pyplot as plt
@@ -37,7 +32,7 @@ from matplotlib.lines import Line2D
 
 
 class Lattice:
-    def __init__(self, dimension: int, time_period: float, fps: int, simulation: bool, id_: str, run: None) -> None:
+    def __init__(self, dimension: int, time_period: float, fps: int, simulation: bool, id_: str) -> None:
 
         #  Dimension of the lattice
         self.dimension = dimension
@@ -87,18 +82,14 @@ class Lattice:
 
         # Attribute to verify that clustering has been done
         self.clustered = False
-        self.execution_time = None
 
-        # Attributo per tenere traccia delle diverse tun
-        self.run = run
-
-    def init_algo(self, n: int, k: int, explained_variance_pct:float, b: int) -> None:
+    def init_algo(self, n: int, k: int, explained_variance_pct: float, b: int) -> None:
         """Init algorithm parameters.
 
         Args:
             n (int): Number of select point over the grid to be used as nuclei
             k (int): Number of clusters
-            p (int): Number of FPCs to be retained
+            explained_variance_pct (float): Percentage of explained variance.
             b (int): Number of bootstrap replications
 
         Returns:
@@ -147,43 +138,7 @@ class Lattice:
                 "Error: you must first perform clustering and cluster matching.")
 
     @property
-    def precision_score_(self):
-        """Find precision score in binary clustering.
-
-        Returns:
-            float: If available return precision score, otherwise raise an exception. 
-        """
-        assert self.simulation, "You can compute classification rate only on simulated data."
-        assert self.k == 2, "Precision score is available only in binary clusterization"
-        if self.clustered:
-            new_labels = _cluster_mapping(self.final_label, self.label_matrix)
-            temp = _change_label(self.final_label, new_labels)
-            return precision_score(self.label_matrix.reshape((self.dimension*self.dimension, 1)), temp.reshape((self.dimension*self.dimension, 1)), average='weighted', labels=np.unique(temp))
-
-        else:
-            raise Exception(
-                "Error: you must first perform clustering and cluster matching.")
-
-    @property
-    def recall_score_(self):
-        """Find recall score in binary clustering.
-
-        Returns:
-            float: If available return recall score, otherwise raise an exception. 
-        """
-        assert self.simulation, "You can compute classification rate only on simulated data."
-        assert self.k == 2, "Recall score is available only in binary clusterization"
-        if self.clustered:
-            new_labels = _cluster_mapping(self.final_label, self.label_matrix)
-            temp = _change_label(self.final_label, new_labels)
-            return recall_score(self.label_matrix.reshape((self.dimension*self.dimension, 1)), temp.reshape((self.dimension*self.dimension, 1)))
-
-        else:
-            raise Exception(
-                "Error: you must first perform clustering and cluster matching.")
-
-    @property
-    def labels_(self) -> np.ndarray:
+    def final_labels_(self) -> np.ndarray:
         """Return final label as a matrix.
 
         Returns:
@@ -196,6 +151,11 @@ class Lattice:
                 "Error: you must first perform clustering and cluster matching.")
 
     def build(self, profile_list: list):
+        """Build the structure starting from a Profile class list.
+
+        Args:
+            profile_list (list): _description_
+        """
         arr = []
         if self.simulation:
             for p in profile_list:
@@ -212,11 +172,18 @@ class Lattice:
                 self.structure[:, p.y, p.x] = p.profile
 
     def build_smooth_func(self, bandwidth: float):
+        """Create functional representation using a smoother with a given bandwidth
+
+        Args:
+            bandwidth (float): Bandwidth for the smoother
+        """
         kernel_estimator = NadarayaWatsonHatMatrix(bandwidth=bandwidth)
         smoother = KernelSmoother(kernel_estimator=kernel_estimator)
         self.func_object = smoother.fit_transform(self.func_object)
 
     def find_final_label(self):
+        """Find final label for majority voting across bootstrap replications.
+        """
         self.clustered = True
         for i in range(self.dimension):
             for j in range(self.dimension):
@@ -228,6 +195,8 @@ class Lattice:
         self.final_label = np.argmax(self.percentage, axis=0)
 
     def do_cluster_matching(self):
+        """Perform cluster matching by maximising the sum of contincency matrix principall diagonal.
+        """
         baseline = self.labels[0, :, :]
         for i in range(self.labels.shape[0]):
             new_labels = _cluster_mapping(self.labels[i, :, :], baseline)
@@ -235,6 +204,8 @@ class Lattice:
                 self.labels[i, :, :], new_labels)
 
     def find_entropy(self):
+        """Compute spatial entropy
+        """
         for i in range(self.dimension):
             for j in range(self.dimension):
                 arr = self.percentage[:, i, j] + 1e-15  #  For log
@@ -245,12 +216,12 @@ class Lattice:
             self.spatial_entropy/np.log(self.k), 4)
 
     def cluster_now(self):
-        start_time = time.time()
+        """Start clustering process
+        """
         self.set_p()
         for i in range(self.b):
             # Select n random nuclei from the lattice
             nuclei = _random_nuclei(self.n, self.dimension)
-            # print(f"Nuclei are: {nuclei}")
 
             # Mapping each gridpoint to nearest nucleus
             nuclei_map = _nuclei_mapping(grid_points=self.grid_points,
@@ -261,7 +232,7 @@ class Lattice:
                                    mapping=nuclei_map,
                                    grid_points=self.grid_points,
                                    fd=self.func_object)
-            
+
             # Compute scores of FPCA
             scores = _do_fda(fd=rep_functions,
                              p=self.p)
@@ -279,39 +250,9 @@ class Lattice:
 
         self.find_entropy()
 
-        self.execution_time = time.time()-start_time
-
-    def save_log_json(self, root: str):
-        location = _build_path(root, self)
-
-        output_file = os.path.join(location, self.run + ".json")
-        p = self.precision_score_
-        r = self.recall_score_
-        if p==0 or r==0:
-            f1=0
-        else:
-            f1=2*(r*p)/(r+p)
-
-        dictionary = dict(scenario=self.id_,
-                          run=self.run,
-                          k=self.k,
-                          n=self.n,
-                          b=self.b,
-                          p=self.p,
-                          average_normalized_entropy=self.average_normalized_entropy_,
-                          classification_rate=self.classification_rate_,
-                          precision=p,
-                          recall=r,
-                          f1score=f1,
-                          execution_time=self.execution_time,
-                          ground_truth=self.label_matrix.tolist(),
-                          final_label=self.final_label.tolist(),
-                          entropy_map=self.spatial_entropy.tolist())
-
-        with open(output_file, "w") as file:
-            json.dump(dictionary, file, indent=4)
-
-    def plot_profiles(self) -> None:
+    def plot_profiles(self):
+        """Plot structure profiles.
+        """
         fig, ax = plt.subplots()
 
         if self.simulation:
@@ -349,7 +290,7 @@ class Lattice:
         ax.set_title("Observed Profiles", size=20, pad=10)
         plt.show()
 
-    def plot(self) -> None:
+    def plot(self):
         """Function to plot clusters map and entropy map if available, otherwise raise an exception.
         """
 
@@ -394,11 +335,25 @@ class Lattice:
 
         plt.show()
 
-    def func_plot(self) -> None:
-        self.func_object.plot()
-        plt.show()
+    def func_plot(self):
+        """Plot the functional object
+        """
+        if self.func_object is not None:
+            self.func_object.plot()
+            plt.show()
+
+        else:
+            raise Exception(
+                "No functional data found. Did you run build_smooth_func?")
 
     def save_in_gif(self, root: str, cmap_string: str = "plasma", milliseconds: int = 50):
+        """Save the structure as a gif for viz purposes.
+
+        Args:
+            root (str): Root path to save the animation
+            cmap_string (str, optional): matplotlib cmap for the animation. Defaults to "plasma".
+            milliseconds (int, optional): Frames duration. Defaults to 50.
+        """
         # Build location
         location = _build_path(root, self)
 
@@ -432,20 +387,31 @@ class Lattice:
         frames_gif[0].save(os.path.join(location, name), save_all=True, append_images=frames_gif[1:], loop=0,
                            duration=milliseconds)
 
-        #shutil.rmtree(temp_location)
+        #  Remove temporary folder
+        shutil.rmtree(temp_location)
+
+        # Remove temporary structure
         del temp
-        return None
-    
 
     def set_p(self):
+        """Set the number of PCs to be retained in order to explain at least explained_variance_pct of total variance.
+        """
         fpca = FPCA(n_components=20)
         fpca.fit(self.func_object)
         a = np.cumsum(fpca.explained_variance_ratio_)
-        self.p= min(a[a<self.explained_variance_pct].shape[0]+1,self.n-1)
-
+        self.p = min(a[a < self.explained_variance_pct].shape[0]+1, self.n-1)
 
 
 def _build_path(root, lattice):
+    """Build a path to store files
+
+    Args:
+        root (_type_): Root path
+        lattice (_type_): Structure to be saved
+
+    Returns:
+        _type_: os.path 
+    """
     location = os.path.join(root, lattice.id_)
     if not os.path.exists(location):
         os.mkdir(location)
@@ -453,6 +419,15 @@ def _build_path(root, lattice):
 
 
 def _change_label(arr: np.ndarray, new_label) -> np.ndarray:
+    """Change label after cluster matching
+
+    Args:
+        arr (np.ndarray): Array with old labels.
+        new_label (_type_): New_labels to be substituted.
+
+    Returns:
+        np.ndarray: New updated labels
+    """
     final = np.zeros_like(arr)
     for i, l in enumerate(new_label):
         final[arr == i] = l
@@ -460,6 +435,15 @@ def _change_label(arr: np.ndarray, new_label) -> np.ndarray:
 
 
 def _cluster_mapping(array: np.ndarray, baseline: np.ndarray) -> np.ndarray:
+    """Map labels of array to labels of baseline
+
+    Args:
+        array (np.ndarray): New labels array
+        baseline (np.ndarray): Reference labels array
+
+    Returns:
+        np.ndarray: Returns the mapping
+    """
     matrix = contingency_matrix(array, baseline)
     new_label = np.argmax(matrix, axis=1)
     return new_label
@@ -501,8 +485,7 @@ def _euclidean_distance(point1: np.ndarray, point2: np.ndarray) -> float:
 
 
 def _max_min_distance(coordinates: np.ndarray):
-    """
-    Calcola la distanza euclidea massima e minima tra tutte le coordinate nella lista.
+    """Compute max e min distances between an array of coordinates.
     """
 
     max_dist = float('-inf')
@@ -515,15 +498,6 @@ def _max_min_distance(coordinates: np.ndarray):
             min_dist = min(min_dist, distance)
 
     return max_dist, min_dist
-
-
-# def _indexing_coordinates_array(coordinates_list: list):
-#     ax_1 = []
-#     ax_0 = []
-#     for c in coordinates_list:
-#         ax_0.append(c[0])
-#         ax_1.append(c[1])
-#     return ax_0, ax_1
 
 
 def _nuclei_mapping(grid_points: np.ndarray, nuclei: np.ndarray) -> np.ndarray:
@@ -562,7 +536,7 @@ def _group(nuclei: np.ndarray, mapping: np.ndarray, grid_points: np.ndarray, fd)
     Returns:
         dict: Return a dictionary in the form {int label of the nucleus, np.ndarray of the weighted average}
     """
-    
+
     max_dist, min_dist = _max_min_distance(nuclei)
 
     # Find sigma
@@ -571,15 +545,13 @@ def _group(nuclei: np.ndarray, mapping: np.ndarray, grid_points: np.ndarray, fd)
     # Compute covariance matrix for bivariate normal distribution
     cov_matrix = sigma**2*np.identity(2)
 
-
     n = 0
     selected_points = grid_points[mapping == n]
-    
+
     weights = _compute_gaussian_weight(loc=nuclei[n],
                                        covmatrix=cov_matrix,
                                        selected_points=selected_points)
     avg_function = stats.mean(fd[mapping == n], weights=weights)
-
 
     for n in range(1, np.max(mapping)+1):
         selected_points = grid_points[mapping == n]
@@ -587,8 +559,8 @@ def _group(nuclei: np.ndarray, mapping: np.ndarray, grid_points: np.ndarray, fd)
                                            covmatrix=cov_matrix,
                                            selected_points=selected_points)
         temp = stats.mean(fd[mapping == n], weights=weights)
-        avg_function  = avg_function.concatenate(temp)
-    
+        avg_function = avg_function.concatenate(temp)
+
     return avg_function
 
 
@@ -617,7 +589,6 @@ def _kmeans_clustering(matrix: np.ndarray, k: int) -> np.ndarray:
     """Function that perform kmeans clustering and return the labels of the cluster. 
     Take as argument a bidimensional numpy array in the form [[p11,p12,p13], [p21,p22,p23], [p31,p32,p33], ... [pn1,pn2,pn3],]
 
-
     Args:
         matrix (np.ndarray): A matrix with the observations to be clustered
         k (int): Number of cluster
@@ -630,12 +601,30 @@ def _kmeans_clustering(matrix: np.ndarray, k: int) -> np.ndarray:
 
 
 def _do_fda(fd, p: int) -> np.ndarray:
+    """Compute FPCA scores given a FD object and p PCs to be retained.
+
+    Args:
+        fd (FD Object): Functional data object
+        p (int): PCs to be retained
+
+    Returns:
+        np.ndarray: Array with scores of the first p PCs
+    """
     fpca = FPCA(n_components=p)
     fd_score = fpca.fit_transform(fd)
     return fd_score
 
 
 def _unfold_clusters(labels: list, mapping: np.ndarray) -> np.ndarray:
+    """Remap the cluster to original lattice points
+
+    Args:
+        labels (list): Cluster associated to the nucleus
+        mapping (np.ndarray): Maps that define every point nucleus
+
+    Returns:
+        np.ndarray: return unfolded cluster labels
+    """
     result = np.zeros_like(mapping)
     for i, e in enumerate(mapping):
         result[i] = labels[e]
