@@ -1,2 +1,2 @@
-# Tesi Nuova
+# Bagging Voronoi Classificator
 My master of science thesis project.<br>The aim of this project is to develop a package in order to perform clustering of functional data in order to find pixels on the xy plane that are similar in time (expressed by the incresing height) and close in space.<br>🎓 Politecnico di Milano<br>🗓️ A.Y. 2022/2023<br>🚀 "Dall'onniscenza di Dio alla mano dell'uomo che ne trae beneficio, tutto passa per la mente di pochi eletti."
